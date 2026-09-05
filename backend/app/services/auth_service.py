@@ -11,7 +11,6 @@ from app.core.security import (
 
 from jose import jwt
 from datetime import datetime, timedelta
-
 SECRET_KEY = "mysecretkey"
 
 ALGORITHM = "HS256"
