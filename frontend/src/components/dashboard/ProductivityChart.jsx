@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import {
   BarChart,
   Bar,
@@ -8,53 +10,120 @@ import {
   CartesianGrid,
 } from "recharts";
 
-const data = [
-  { day: "Mon", tasks: 2 },
-  { day: "Tue", tasks: 4 },
-  { day: "Wed", tasks: 3 },
-  { day: "Thu", tasks: 5 },
-  { day: "Fri", tasks: 6 },
-  { day: "Sat", tasks: 2 },
-  { day: "Sun", tasks: 1 },
-];
+import API from "../../api/axios";
+
 
 const ProductivityChart = () => {
+
+  const [data, setData] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+
+
+  useEffect(() => {
+
+    const fetchWeeklyProductivity = async () => {
+
+      try {
+
+        const response = await API.get(
+          "/dashboard/weekly-productivity"
+        );
+
+        setData(
+          response.data?.weekly_productivity || []
+        );
+
+      } catch (error) {
+
+        console.error(
+          "Failed to fetch weekly productivity:",
+          error
+        );
+
+      } finally {
+
+        setLoading(false);
+
+      }
+
+    };
+
+
+    fetchWeeklyProductivity();
+
+  }, []);
+
 
   return (
 
     <div className="bg-white p-5 rounded-xl shadow-md">
 
-      <h2 className="text-2xl font-bold mb-5">
-        Weekly Productivity
-      </h2>
+      <div className="flex items-center justify-between mb-5">
 
-      <ResponsiveContainer
-        width="100%"
-        height={300}
-      >
+        <div>
 
-        <BarChart data={data}>
+          <h2 className="text-2xl font-bold">
+            Weekly Productivity
+          </h2>
 
-          <CartesianGrid strokeDasharray="3 3" />
+          <p className="text-sm text-gray-500 mt-1">
+            Your activity during the last 7 days
+          </p>
 
-          <XAxis dataKey="day" />
+        </div>
 
-          <YAxis />
+      </div>
 
-          <Tooltip />
 
-          <Bar
-            dataKey="tasks"
-            fill="#3b82f6"
-            radius={[8, 8, 0, 0]}
-          />
+      {loading ? (
 
-        </BarChart>
+        <div className="h-[300px] flex items-center justify-center text-gray-500">
 
-      </ResponsiveContainer>
+          Loading productivity...
+
+        </div>
+
+      ) : (
+
+        <ResponsiveContainer
+          width="100%"
+          height={300}
+        >
+
+          <BarChart data={data}>
+
+            <CartesianGrid
+              strokeDasharray="3 3"
+            />
+
+            <XAxis
+              dataKey="day"
+            />
+
+            <YAxis
+              allowDecimals={false}
+            />
+
+            <Tooltip />
+
+            <Bar
+              dataKey="activities"
+              fill="#3b82f6"
+              radius={[8, 8, 0, 0]}
+            />
+
+          </BarChart>
+
+        </ResponsiveContainer>
+
+      )}
 
     </div>
+
   );
+
 };
+
 
 export default ProductivityChart;

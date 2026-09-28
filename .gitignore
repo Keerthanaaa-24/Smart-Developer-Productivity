@@ -1,5 +1,50 @@
-node_modules
-dist
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+env/
+ENV/
+backend/venv/
+
+# Environment / Secrets
 .env
-.vscode
+.env.*
+!.env.example
+
+# Node / React
+node_modules/
+frontend/node_modules/
+dist/
+build/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Python testing / cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo

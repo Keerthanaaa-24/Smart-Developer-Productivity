@@ -1,7 +1,6 @@
 from sqlalchemy.orm import Session
 
 from app.models.user import User
-
 from app.schemas.user_schema import UserCreate
 
 from app.core.security import (
@@ -11,12 +10,17 @@ from app.core.security import (
 
 from jose import jwt
 from datetime import datetime, timedelta
+
 SECRET_KEY = "mysecretkey"
 
 ALGORITHM = "HS256"
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
+
+# =========================================================
+# CREATE USER
+# =========================================================
 
 def create_user(
     db: Session,
@@ -42,6 +46,10 @@ def create_user(
     return db_user
 
 
+# =========================================================
+# AUTHENTICATE USER
+# =========================================================
+
 def authenticate_user(
     db: Session,
     username: str,
@@ -55,18 +63,50 @@ def authenticate_user(
     )
 
     if not user:
-
         return None
 
     if not verify_password(
         password,
         user.password,
     ):
-
         return None
 
     return user
 
+
+# =========================================================
+# CHANGE PASSWORD
+# =========================================================
+
+def change_password(
+    db: Session,
+    user: User,
+    current_password: str,
+    new_password: str,
+):
+
+    # Verify current password
+    if not verify_password(
+        current_password,
+        user.password,
+    ):
+        return False
+
+    # Hash new password
+    user.password = hash_password(
+        new_password
+    )
+
+    db.commit()
+
+    db.refresh(user)
+
+    return True
+
+
+# =========================================================
+# CREATE ACCESS TOKEN
+# =========================================================
 
 def create_access_token(
     data: dict,
@@ -79,7 +119,9 @@ def create_access_token(
     )
 
     to_encode.update(
-        {"exp": expire}
+        {
+            "exp": expire
+        }
     )
 
     encoded_jwt = jwt.encode(
@@ -88,5 +130,3 @@ def create_access_token(
         algorithm=ALGORITHM,
     )
 
-    return encoded_jwt
-    

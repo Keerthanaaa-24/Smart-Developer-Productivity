@@ -4,7 +4,6 @@ import {
   FaTasks,
   FaChartBar,
   FaClock,
-  FaGithub,
   FaCog,
 } from "react-icons/fa";
 
@@ -28,11 +27,6 @@ const menuItems = [
     icon: <FaClock />,
     title: "Pomodoro",
     path: "/pomodoro",
-  },
-  {
-    icon: <FaGithub />,
-    title: "GitHub",
-    path: "/github",
   },
   {
     icon: <FaCog />,
