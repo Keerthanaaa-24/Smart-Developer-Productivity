@@ -1,28 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Developer Productivity Dashboard</title>
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  />
-
-  <title>
-    Smart Developer Productivity Dashboard
-  </title>
+  <!-- Instant Theme Bootstrapper to prevent theme flash -->
+  <script>
+    (function () {
+      try {
+        var theme = localStorage.getItem("smart_dev_theme") || "dark";
+        var isDark =
+          theme === "dark" ||
+          (theme === "system" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (isDark) {
+          document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = "dark";
+        } else {
+          document.documentElement.classList.remove("dark");
+          document.documentElement.style.colorScheme = "light";
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 
-<body>
-
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased transition-colors duration-150">
   <div id="root"></div>
-
-  <script
-    type="module"
-    src="/src/main.jsx"
-  ></script>
-
+  <script type="module" src="/src/main.jsx"></script>
 </body>
 
 </html>

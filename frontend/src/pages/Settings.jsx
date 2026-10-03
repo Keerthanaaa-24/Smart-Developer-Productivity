@@ -1,129 +1,187 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import MainLayout from "../layouts/MainLayout";
+import ProfileSettings from "../settings/ProfileSettings";
+import SecuritySettings from "../settings/SecuritySettings";
+import AppearanceSettings from "../settings/AppearanceSettings";
+import NotificationsSettings from "../settings/NotificationsSettings";
+import ProductivitySettings from "../settings/ProductivitySettings";
 import ConnectedAccounts from "../settings/ConnectedAccounts";
+import PrivacySettings from "../settings/PrivacySettings";
+import {
+  FaUser,
+  FaLock,
+  FaPalette,
+  FaBell,
+  FaStopwatch,
+  FaLink,
+  FaShieldAlt,
+  FaCog,
+} from "react-icons/fa";
 
 const Settings = () => {
-  const [activeSection, setActiveSection] =
-    useState("Connected Accounts");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get("tab") || (searchParams.get("github") ? "connected" : "profile");
+  const [activeTab, setActiveTab] = useState(urlTab);
 
-  const sections = [
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    const githubParam = searchParams.get("github");
+    if (tabParam) {
+      setActiveTab(tabParam);
+    } else if (githubParam) {
+      setActiveTab("connected");
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setSearchParams({ tab: tabId });
+  };
+
+  const tabs = [
     {
+      id: "profile",
+      name: "Profile",
+      icon: <FaUser className="text-sm" />,
+      description: "Manage your name, username, and biography",
+    },
+    {
+      id: "security",
+      name: "Account & Security",
+      icon: <FaLock className="text-sm" />,
+      description: "Update password and secure login credentials",
+    },
+    {
+      id: "appearance",
+      name: "Appearance",
+      icon: <FaPalette className="text-sm" />,
+      description: "Light, dark, and system theme modes",
+    },
+    {
+      id: "notifications",
+      name: "Notifications",
+      icon: <FaBell className="text-sm" />,
+      description: "Pomodoro alerts, audio chimes, and coaching",
+    },
+    {
+      id: "productivity",
+      name: "Productivity & Focus",
+      icon: <FaStopwatch className="text-sm" />,
+      description: "Daily output targets and Pomodoro durations",
+    },
+    {
+      id: "connected",
       name: "Connected Accounts",
-      icon: "🔗",
+      icon: <FaLink className="text-sm" />,
+      description: "GitHub, LeetCode, FCC, GFG, NPTEL, Coursera",
+    },
+    {
+      id: "privacy",
+      name: "Privacy & Data",
+      icon: <FaShieldAlt className="text-sm" />,
+      description: "Data visibility, telemetry logs, and deletion",
     },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-
-          <p className="text-sm font-semibold text-blue-600">
-            Account
-          </p>
-
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mt-1">
-            Settings
-          </h1>
-
-          <p className="text-gray-500 mt-2">
-            Manage your connected developer and learning platforms.
-          </p>
-
+    <MainLayout>
+      <div className="max-w-7xl mx-auto space-y-6 pb-12">
+        {/* Page Header */}
+        <div className="border-b border-slate-200/80 dark:border-slate-800 pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">
+              <FaCog />
+              <span>Workspace Preferences</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+              Settings & Personalization
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Customize your developer profile, targets, connected platforms, and account security.
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-
-        {/* Mobile */}
-        <div className="lg:hidden mb-5">
-
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Settings
+        {/* Mobile Tab Selector */}
+        <div className="lg:hidden">
+          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+            Settings Section
           </label>
-
           <select
-            value={activeSection}
-            onChange={(e) =>
-              setActiveSection(e.target.value)
-            }
-            className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={activeTab}
+            onChange={(e) => handleTabChange(e.target.value)}
+            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-200 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {sections.map((section) => (
-              <option
-                key={section.name}
-                value={section.name}
-              >
-                {section.name}
+            {tabs.map((tab) => (
+              <option key={tab.id} value={tab.id}>
+                {tab.name}
               </option>
             ))}
           </select>
-
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6">
-
-          {/* Sidebar */}
-          <aside className="hidden lg:block w-64 shrink-0">
-
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3">
-
-              <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
-                Settings
+        {/* 2-Column Responsive Layout */}
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+          {/* Sidebar Navigation */}
+          <aside className="hidden lg:block w-72 shrink-0">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs dark:shadow-xl p-3 space-y-1 sticky top-24 transition-colors duration-200">
+              <p className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Navigation
               </p>
 
-              {sections.map((section) => {
-
-                const active =
-                  activeSection === section.name;
-
+              {tabs.map((tab) => {
+                const isActive = activeTab === tab.id;
                 return (
                   <button
-                    key={section.name}
-                    onClick={() =>
-                      setActiveSection(section.name)
-                    }
-                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition ${
-                      active
-                        ? "bg-blue-600 text-white"
-                        : "text-gray-600 hover:bg-gray-50"
+                    key={tab.id}
+                    onClick={() => handleTabChange(tab.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition cursor-pointer ${
+                      isActive
+                        ? "bg-blue-600 text-white font-bold shadow-md shadow-blue-500/20"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white font-medium"
                     }`}
                   >
-                    <span className="text-lg">
-                      {section.icon}
+                    <span
+                      className={`p-2 rounded-xl transition ${
+                        isActive
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                      }`}
+                    >
+                      {tab.icon}
                     </span>
-
-                    <span className="text-sm font-medium">
-                      {section.name}
-                    </span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold leading-none">{tab.name}</div>
+                      <div
+                        className={`text-[11px] truncate mt-1 ${
+                          isActive ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
+                        }`}
+                      >
+                        {tab.description}
+                      </div>
+                    </div>
                   </button>
                 );
               })}
-
             </div>
-
           </aside>
 
-          {/* Main */}
-          <main className="flex-1 min-w-0">
-
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-
-              {activeSection === "Connected Accounts" && (
-                <ConnectedAccounts />
-              )}
-
+          {/* Main Content Area */}
+          <main className="flex-1 min-w-0 w-full">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs dark:shadow-xl overflow-hidden transition-colors duration-200">
+              {activeTab === "profile" && <ProfileSettings />}
+              {activeTab === "security" && <SecuritySettings />}
+              {activeTab === "appearance" && <AppearanceSettings />}
+              {activeTab === "notifications" && <NotificationsSettings />}
+              {activeTab === "productivity" && <ProductivitySettings />}
+              {activeTab === "connected" && <ConnectedAccounts />}
+              {activeTab === "privacy" && <PrivacySettings />}
             </div>
-
           </main>
-
         </div>
-
       </div>
-
-    </div>
+    </MainLayout>
   );
 };
 

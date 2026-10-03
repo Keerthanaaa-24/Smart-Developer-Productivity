@@ -29,5 +29,6 @@ class Task(Base):
 
     user_id = Column(
         Integer,
-        ForeignKey("users.id")
+        ForeignKey("users.id"),
+        index=True,
     )

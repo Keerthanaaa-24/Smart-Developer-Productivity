@@ -1,9 +1,15 @@
 fastapi
-uvicorn
+uvicorn[standard]
 sqlalchemy
 pymysql
+psycopg2-binary
+cryptography
 python-dotenv
 passlib[bcrypt]
-python-jose
+bcrypt==4.0.1
+python-jose[cryptography]
 pydantic
 email-validator
+python-multipart
+httpx
+gunicorn

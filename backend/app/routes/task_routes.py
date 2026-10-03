@@ -27,6 +27,20 @@ router = APIRouter(
 )
 
 
+def serialize_task(task):
+    if not task:
+        return None
+    return {
+        "id": task.id,
+        "title": task.title or "",
+        "description": task.description or "",
+        "status": task.status or "Pending",
+        "priority": task.priority or "Medium",
+        "due_date": str(task.due_date) if task.due_date else None,
+        "user_id": task.user_id,
+    }
+
+
 @router.post("/")
 def add_task(
     task: TaskCreate,
@@ -42,7 +56,7 @@ def add_task(
 
     return {
         "message": "Task created successfully",
-        "task": new_task
+        "task": serialize_task(new_task)
     }
 
 
@@ -57,7 +71,7 @@ def all_tasks(
         current_user.id
     )
 
-    return tasks
+    return [serialize_task(t) for t in tasks]
 
 
 @router.get("/{task_id}")
@@ -80,7 +94,7 @@ def single_task(
             detail="Task not found"
         )
 
-    return task
+    return serialize_task(task)
 
 
 @router.put("/{task_id}")
@@ -107,7 +121,7 @@ def edit_task(
 
     return {
         "message": "Task updated successfully",
-        "task": updated_task
+        "task": serialize_task(updated_task)
     }
 
 

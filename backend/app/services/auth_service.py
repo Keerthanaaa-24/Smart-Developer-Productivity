@@ -10,10 +10,14 @@ from app.core.security import (
 
 from jose import jwt
 from datetime import datetime, timedelta
+import os
+from dotenv import load_dotenv
 
-SECRET_KEY = "mysecretkey"
+load_dotenv()
 
-ALGORITHM = "HS256"
+SECRET_KEY = os.getenv("SECRET_KEY", "mysecretkey")
+
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -26,24 +30,27 @@ def create_user(
     db: Session,
     user: UserCreate,
 ):
+    try:
+        hashed_password = hash_password(
+            user.password
+        )
 
-    hashed_password = hash_password(
-        user.password
-    )
+        db_user = User(
+            username=user.username.strip(),
+            email=str(user.email).strip().lower(),
+            password=hashed_password,
+        )
 
-    db_user = User(
-        username=user.username,
-        email=user.email,
-        password=hashed_password,
-    )
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    except Exception:
+        db.rollback()
+        raise
 
-    db.add(db_user)
 
-    db.commit()
-
-    db.refresh(db_user)
-
-    return db_user
+from sqlalchemy import func
 
 
 # =========================================================
@@ -55,10 +62,17 @@ def authenticate_user(
     username: str,
     password: str,
 ):
+    if not username or not password:
+        return None
+
+    clean_username = username.strip()
 
     user = (
         db.query(User)
-        .filter(User.email == username)
+        .filter(
+            (func.lower(User.email) == clean_username.lower())
+            | (func.lower(User.username) == clean_username.lower())
+        )
         .first()
     )
 
@@ -129,4 +143,7 @@ def create_access_token(
         SECRET_KEY,
         algorithm=ALGORITHM,
     )
+
+    return encoded_jwt
+
 

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Developer Productivity</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="logo-icon">⚡</div>
+        <div>
+          <h1>Smart Dev Productivity</h1>
+          <p class="subtitle">Privacy-First Activity Tracker</p>
+        </div>
+      </div>
+      <div id="connection-status-pill" class="status-pill offline">
+        <span class="dot"></span>
+        <span id="connection-status-text">Disconnected</span>
+      </div>
+    </header>
+
+    <!-- Main Content Body -->
+    <main class="content">
+      <!-- Consent & Tracking Status Banner -->
+      <section class="card tracking-card">
+        <div class="card-header">
+          <span class="label">Activity Tracking</span>
+          <span id="tracking-state-badge" class="badge badge-off">OFF</span>
+        </div>
+
+        <div id="consent-explanation" class="consent-box">
+          <p class="consent-text">
+            🛡️ <strong>Privacy-First & Consent-First:</strong> Records active duration on supported developer & career platforms. Never reads passwords, messages, cookies, or page contents.
+          </p>
+        </div>
+
+        <button id="toggle-tracking-btn" class="btn btn-primary btn-block">
+          Enable Activity Tracking
+        </button>
+      </section>
+
+      <!-- Active Session Live Box -->
+      <section id="active-session-card" class="card active-card hidden">
+        <div class="card-header">
+          <span class="label">Active Platform</span>
+          <span class="live-indicator"><span class="pulse"></span> LIVE</span>
+        </div>
+        <div class="active-platform-info">
+          <span id="active-platform-icon" class="platform-icon">💻</span>
+          <div>
+            <h3 id="active-platform-name">GitHub</h3>
+            <p id="active-session-timer" class="timer">00:00:00</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Today's Browser Activity Breakdown -->
+      <section class="card stats-card">
+        <div class="card-header">
+          <span class="label">Today's Browser Activity</span>
+          <span id="total-today-time" class="time-total">0m</span>
+        </div>
+        <div id="platform-stats-list" class="stats-list">
+          <div class="empty-state">No platform activity recorded today yet.</div>
+        </div>
+      </section>
+
+      <!-- Sync & Local Queue Telemetry -->
+      <section class="card sync-card">
+        <div class="sync-info">
+          <span id="queue-status-text" class="queue-status">Synced with Cloud</span>
+          <button id="sync-now-btn" class="btn btn-secondary btn-sm" title="Flush offline queue">Sync Now</button>
+        </div>
+        <p id="last-sync-time" class="timestamp-text">Last sync: Never</p>
+      </section>
+
+      <!-- Authentication Section -->
+      <section id="auth-section" class="card auth-card">
+        <!-- If Disconnected: Login Form -->
+        <div id="login-form-container">
+          <h4 class="auth-title">Connect Account</h4>
+          <p class="auth-desc">Sign in with your Smart Developer account to sync telemetry.</p>
+          <form id="login-form" class="login-form">
+            <input type="text" id="auth-username" class="input-field" placeholder="Username or Email" required autocomplete="username">
+            <input type="password" id="auth-password" class="input-field" placeholder="Password" required autocomplete="current-password">
+            <div id="login-error" class="login-error hidden"></div>
+            <button type="submit" id="login-submit-btn" class="btn btn-primary btn-block">Connect Extension</button>
+          </form>
+        </div>
+
+        <!-- If Connected: Account Badge & Logout -->
+        <div id="logged-in-container" class="logged-in-box hidden">
+          <div class="user-badge">
+            <span class="avatar">👤</span>
+            <div>
+              <p class="user-label">Connected User</p>
+              <p id="connected-user-name" class="user-name">Developer</p>
+            </div>
+          </div>
+          <button id="logout-btn" class="btn btn-outline btn-sm">Disconnect</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer Actions -->
+    <footer class="footer">
+      <button id="open-dashboard-btn" class="btn btn-link">
+        Open Dashboard ↗
+      </button>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

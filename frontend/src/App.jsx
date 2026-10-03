@@ -5,11 +5,17 @@ import {
   Navigate,
 } from "react-router-dom";
 
+import AuthProvider from "./context/AuthContext";
+import ThemeProvider from "./context/ThemeContext";
+import ProtectedRoute from "./components/common/ProtectedRoute";
+
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
 import Dashboard from "./pages/Dashboard";
+import Projects from "./pages/Projects";
+import Activity from "./pages/Activity";
 import Analytics from "./pages/Analytics";
 import Tasks from "./pages/Tasks";
 import Pomodoro from "./pages/Pomodoro";
@@ -19,85 +25,135 @@ import GithubIntegration from "./pages/GithubIntegration";
 
 const App = () => {
   return (
-    <BrowserRouter>
-      <Routes>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+        <Routes>
 
-        {/* =====================================================
-            PUBLIC ROUTES
-        ===================================================== */}
+          {/* =====================================================
+              PUBLIC ROUTES
+          ===================================================== */}
 
-        <Route
-          path="/"
-          element={<Home />}
-        />
+          <Route
+            path="/"
+            element={<Home />}
+          />
 
-        <Route
-          path="/login"
-          element={<Login />}
-        />
+          <Route
+            path="/login"
+            element={<Login />}
+          />
 
-        <Route
-          path="/register"
-          element={<Register />}
-        />
-
-
-        {/* =====================================================
-            APPLICATION ROUTES
-        ===================================================== */}
-
-        <Route
-          path="/dashboard"
-          element={<Dashboard />}
-        />
-
-        <Route
-          path="/analytics"
-          element={<Analytics />}
-        />
-
-        <Route
-          path="/tasks"
-          element={<Tasks />}
-        />
-
-        <Route
-          path="/pomodoro"
-          element={<Pomodoro />}
-        />
-
-        <Route
-          path="/profile"
-          element={<Profile />}
-        />
-
-        <Route
-          path="/settings"
-          element={<Settings />}
-        />
-
-        <Route
-          path="/github"
-          element={<GithubIntegration />}
-        />
+          <Route
+            path="/register"
+            element={<Register />}
+          />
 
 
-        {/* =====================================================
-            FALLBACK
-        ===================================================== */}
+          {/* =====================================================
+              APPLICATION ROUTES (PROTECTED)
+          ===================================================== */}
 
-        <Route
-          path="*"
-          element={
-            <Navigate
-              to="/dashboard"
-              replace
-            />
-          }
-        />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
 
-      </Routes>
-    </BrowserRouter>
+          <Route
+            path="/projects"
+            element={
+              <ProtectedRoute>
+                <Projects />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/activity"
+            element={
+              <ProtectedRoute>
+                <Activity />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/analytics"
+            element={
+              <ProtectedRoute>
+                <Analytics />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/tasks"
+            element={
+              <ProtectedRoute>
+                <Tasks />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/pomodoro"
+            element={
+              <ProtectedRoute>
+                <Pomodoro />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/github"
+            element={
+              <ProtectedRoute>
+                <GithubIntegration />
+              </ProtectedRoute>
+            }
+          />
+
+
+          {/* =====================================================
+              FALLBACK
+          ===================================================== */}
+
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to="/dashboard"
+                replace
+              />
+            }
+          />
+
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  </ThemeProvider>
   );
 };
 

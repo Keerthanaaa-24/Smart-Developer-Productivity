@@ -11,7 +11,8 @@ from app.models.user import User
 from app.models.developer_activity import DeveloperActivity
 
 from app.services.dashboard_service import (
-    get_dashboard_stats
+    get_dashboard_stats,
+    get_dashboard_overview,
 )
 
 
@@ -22,7 +23,22 @@ router = APIRouter(
 
 
 # =====================================================
-# DASHBOARD STATS
+# DASHBOARD OVERVIEW (COMMAND CENTER 2.0)
+# =====================================================
+
+@router.get("/overview")
+def dashboard_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return get_dashboard_overview(
+        db=db,
+        user_id=current_user.id
+    )
+
+
+# =====================================================
+# DASHBOARD STATS (BACKWARDS COMPATIBILITY)
 # =====================================================
 
 @router.get("/stats")
@@ -39,9 +55,7 @@ def dashboard_stats(
     return stats
 
 
-# =====================================================
-# WEEKLY PRODUCTIVITY
-# =====================================================
+from sqlalchemy import func
 
 @router.get("/weekly-productivity")
 def weekly_productivity(
@@ -50,29 +64,31 @@ def weekly_productivity(
 ):
 
     today = date.today()
+    start_date = today - timedelta(days=6)
+
+    # Single grouped query for 7-day range
+    counts = dict(
+        db.query(
+            DeveloperActivity.activity_date,
+            func.count(DeveloperActivity.id),
+        )
+        .filter(
+            DeveloperActivity.user_id == current_user.id,
+            DeveloperActivity.activity_date >= start_date,
+            DeveloperActivity.activity_date <= today,
+        )
+        .group_by(DeveloperActivity.activity_date)
+        .all()
+    )
 
     weekly_data = []
 
-    # Last 7 days including today
     for days_ago in range(6, -1, -1):
-
-        current_date = (
-            today - timedelta(days=days_ago)
-        )
-
-        activity_count = (
-            db.query(DeveloperActivity)
-            .filter(
-                DeveloperActivity.user_id == current_user.id,
-                DeveloperActivity.activity_date == current_date,
-            )
-            .count()
-        )
-
+        current_date = today - timedelta(days=days_ago)
         weekly_data.append(
             {
                 "day": current_date.strftime("%a"),
-                "activities": activity_count,
+                "activities": counts.get(current_date, 0),
             }
         )
 

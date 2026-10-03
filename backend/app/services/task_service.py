@@ -67,6 +67,9 @@ def update_task(
     if not db_task:
         return None
 
+    was_completed = db_task.status == "Completed"
+    is_now_completed = task.status == "Completed"
+
     db_task.title = task.title
     db_task.description = task.description
     db_task.status = task.status
@@ -74,8 +77,22 @@ def update_task(
     db_task.due_date = task.due_date
 
     db.commit()
-
     db.refresh(db_task)
+
+    # Log unified activity if task was just marked completed
+    if not was_completed and is_now_completed:
+        from app.services.unified_activity_service import record_task_completed_activity
+        try:
+            record_task_completed_activity(
+                db=db,
+                user_id=user_id,
+                task_id=db_task.id,
+                task_title=db_task.title,
+                priority=db_task.priority or "Medium",
+            )
+            db.refresh(db_task)
+        except Exception as e:
+            print("Task completion activity log error:", e)
 
     return db_task
 

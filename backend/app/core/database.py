@@ -9,17 +9,28 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
     raise RuntimeError(
-        "DATABASE_URL is missing from the .env file."
+        "DATABASE_URL is missing from environment variables."
     )
 
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=30,
-    pool_timeout=60,
-    pool_recycle=1800,
-)
+# Fix Render/Heroku postgres:// schema prefix for SQLAlchemy
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# Configure engine arguments based on database dialect
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False},
+    )
+else:
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,
+        pool_size=int(os.getenv("DB_POOL_SIZE", 20)),
+        max_overflow=int(os.getenv("DB_MAX_OVERFLOW", 30)),
+        pool_timeout=60,
+        pool_recycle=1800,
+    )
 
 SessionLocal = sessionmaker(
     autocommit=False,

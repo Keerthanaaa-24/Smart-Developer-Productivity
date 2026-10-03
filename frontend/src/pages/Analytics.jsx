@@ -1,11 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import {
   FaGithub,
   FaFire,
   FaCode,
   FaChartLine,
-  FaTrophy,
   FaCheckCircle,
+  FaSyncAlt,
+  FaExternalLinkAlt,
+  FaClock,
+  FaGraduationCap,
+  FaBrain,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -15,1106 +21,793 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts";
 
 import MainLayout from "../layouts/MainLayout";
 import API from "../api/axios";
+import {
+  getGithubStatistics,
+  getGithubDailyContributions,
+  getGithubLanguages,
+  getGithubStatus,
+} from "../api/githubApi";
+import { getDashboardOverview } from "../api/dashboardApi";
+import ContributionHeatmap from "../components/analytics/ContributionHeatmap";
+import LanguageUsageChart from "../components/analytics/LanguageUsageChart";
 
-
-// =========================================================
-// PLATFORMS
-// =========================================================
-
-const PLATFORMS = [
-  {
-    key: "github",
-    name: "GitHub",
-    icon: "🐙",
-  },
-  {
-    key: "leetcode",
-    name: "LeetCode",
-    icon: "💻",
-  },
-  {
-    key: "geeksforgeeks",
-    name: "GeeksForGeeks",
-    icon: "🟢",
-  },
-  {
-    key: "freecodecamp",
-    name: "freeCodeCamp",
-    icon: "🔥",
-  },
-  {
-    key: "nptel",
-    name: "NPTEL",
-    icon: "🎓",
-  },
-  {
-    key: "coursera",
-    name: "Coursera",
-    icon: "📚",
-  },
-];
-
-
-// =========================================================
-// HELPERS
-// =========================================================
-
-const numberValue = (value) => {
-  const number = Number(value);
-
-  return Number.isFinite(number) ? number : 0;
+const formatDuration = (seconds) => {
+  if (!seconds || seconds <= 0) return "0m";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
 };
 
+const SkeletonCard = ({ className = "h-32" }) => (
+  <div className={`bg-slate-100 dark:bg-slate-800 animate-pulse rounded-2xl ${className}`} />
+);
 
-const getGitHubStats = (data) => {
-  return {
-    repositories:
-      numberValue(
-        data?.repositories ??
-        data?.repo_count ??
-        data?.public_repos
-      ),
-
-    commits:
-      numberValue(
-        data?.commits ??
-        data?.commit_count ??
-        data?.total_commits
-      ),
-
-    pullRequests:
-      numberValue(
-        data?.pull_requests ??
-        data?.pull_request_count
-      ),
-
-    issues:
-      numberValue(
-        data?.issues ??
-        data?.issue_count
-      ),
-  };
-};
-
-
-const normalizeLanguages = (data) => {
-
-  if (!data) {
-    return [];
-  }
-
-  const languages =
-    data.languages ??
-    data;
-
-  if (Array.isArray(languages)) {
-
-    return languages
-      .map((item) => {
-
-        if (
-          typeof item === "string"
-        ) {
-          return {
-            name: item,
-            value: 1,
-          };
-        }
-
-        return {
-          name:
-            item.name ??
-            item.language ??
-            "Unknown",
-
-          value:
-            numberValue(
-              item.value ??
-              item.count ??
-              item.bytes ??
-              1
-            ),
-        };
-      })
-      .filter(
-        (item) => item.value > 0
-      );
-  }
-
-  if (
-    typeof languages === "object"
-  ) {
-
-    return Object.entries(
-      languages
-    ).map(
-      ([name, value]) => ({
-        name,
-        value: numberValue(value),
-      })
+const Custom30DayTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-slate-900 text-white text-xs rounded-xl px-3.5 py-2.5 shadow-xl border border-slate-700">
+        <p className="font-semibold text-slate-200">{data.formattedDate || label}</p>
+        <p className="text-blue-400 font-bold mt-1">
+          {data.contributions} {data.contributions === 1 ? "contribution" : "contributions"}
+        </p>
+      </div>
     );
   }
-
-  return [];
+  return null;
 };
-
-
-const normalizeDailyContributions = (
-  data
-) => {
-
-  if (!data) {
-    return [];
-  }
-
-  let days =
-    data.days ??
-    data.contributions ??
-    data.data ??
-    [];
-
-  if (!Array.isArray(days)) {
-    return [];
-  }
-
-  return days.map((item) => ({
-    date:
-      item.date ??
-      item.day ??
-      "",
-
-    count:
-      numberValue(
-        item.count ??
-        item.contributions ??
-        item.value
-      ),
-  }));
-};
-
-
-// =========================================================
-// COMPONENT
-// =========================================================
 
 const Analytics = () => {
+  const [streak, setStreak] = useState(null);
+  const [githubStats, setGithubStats] = useState(null);
+  const [languagesRaw, setLanguagesRaw] = useState([]);
+  const [dailyContributions, setDailyContributions] = useState([]);
+  const [dashboardOverview, setDashboardOverview] = useState(null);
+  const [githubStatus, setGithubStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [lastSyncTime, setLastSyncTime] = useState(null);
 
-  const [streak, setStreak] =
-    useState(null);
-
-  const [githubStats, setGithubStats] =
-    useState(null);
-
-  const [dailyContributions, setDailyContributions] =
-    useState([]);
-
-  const [languages, setLanguages] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState("");
-
-
-  // =======================================================
-  // LOAD ANALYTICS
-  // =======================================================
-
-  const loadAnalytics = async () => {
-
-    setLoading(true);
+  const loadAnalytics = useCallback(async (isManualRefresh = false) => {
+    if (isManualRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError("");
 
     try {
+      if (isManualRefresh) {
+        try {
+          await API.post("/activity/sync");
+        } catch (syncErr) {
+          console.warn("Manual activity sync warning:", syncErr);
+        }
+      }
 
+      // Concurrently fetch all telemetry endpoints
       const [
-        streakResponse,
-        statsResponse,
-        contributionResponse,
-        languageResponse,
+        streakRes,
+        statsRes,
+        langRes,
+        contribRes,
+        overviewRes,
+        ghStatusRes,
       ] = await Promise.allSettled([
-
-        API.get(
-          "/developer-activity/streak"
-        ),
-
-        API.get(
-          "/github/statistics"
-        ),
-
-        API.get(
-          "/github/daily-contributions"
-        ),
-
-        API.get(
-          "/github/languages"
-        ),
-
+        API.get("/developer-activity/streak"),
+        getGithubStatistics(),
+        getGithubLanguages(),
+        getGithubDailyContributions(),
+        getDashboardOverview(),
+        getGithubStatus(),
       ]);
 
-
-      // ---------------------------------------------------
-      // Developer Streak
-      // ---------------------------------------------------
-
-      if (
-        streakResponse.status ===
-        "fulfilled"
-      ) {
-
-        setStreak(
-          streakResponse.value.data
-        );
+      if (streakRes.status === "fulfilled" && streakRes.value?.data) {
+        setStreak(streakRes.value.data);
       }
 
-
-      // ---------------------------------------------------
-      // GitHub Statistics
-      // ---------------------------------------------------
-
-      if (
-        statsResponse.status ===
-        "fulfilled"
-      ) {
-
-        setGithubStats(
-          getGitHubStats(
-            statsResponse.value.data
-          )
-        );
+      if (statsRes.status === "fulfilled" && statsRes.value) {
+        setGithubStats(statsRes.value);
       }
 
-
-      // ---------------------------------------------------
-      // Daily Contributions
-      // ---------------------------------------------------
-
-      if (
-        contributionResponse.status ===
-        "fulfilled"
-      ) {
-
-        setDailyContributions(
-          normalizeDailyContributions(
-            contributionResponse.value.data
-          )
-        );
+      if (langRes.status === "fulfilled" && langRes.value) {
+        const items = langRes.value.languages || (Array.isArray(langRes.value) ? langRes.value : []);
+        setLanguagesRaw(items);
       }
 
-
-      // ---------------------------------------------------
-      // Languages
-      // ---------------------------------------------------
-
-      if (
-        languageResponse.status ===
-        "fulfilled"
-      ) {
-
-        setLanguages(
-          normalizeLanguages(
-            languageResponse.value.data
-          )
-        );
+      if (contribRes.status === "fulfilled" && contribRes.value) {
+        const days = contribRes.value.days || contribRes.value.contributions || [];
+        setDailyContributions(days);
       }
 
-
-      const allFailed =
-        streakResponse.status === "rejected" &&
-        statsResponse.status === "rejected" &&
-        contributionResponse.status === "rejected" &&
-        languageResponse.status === "rejected";
-
-
-      if (allFailed) {
-
-        setError(
-          "Unable to load analytics data."
-        );
+      if (overviewRes.status === "fulfilled" && overviewRes.value) {
+        setDashboardOverview(overviewRes.value);
       }
 
+      if (ghStatusRes.status === "fulfilled" && ghStatusRes.value) {
+        setGithubStatus(ghStatusRes.value);
+      }
+
+      setLastSyncTime(
+        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      );
     } catch (err) {
-
-      console.error(
-        "Analytics loading error:",
-        err
-      );
-
-      setError(
-        "Unable to load analytics data."
-      );
-
+      console.error("Failed to load analytics telemetry:", err);
+      setError("Failed to fetch fresh telemetry data. Please retry.");
     } finally {
-
       setLoading(false);
+      setRefreshing(false);
     }
-  };
-
-
-  useEffect(() => {
-
-    loadAnalytics();
-
   }, []);
 
+  useEffect(() => {
+    loadAnalytics();
+  }, [loadAnalytics]);
 
-  // =======================================================
-  // LAST 30 DAYS
-  // =======================================================
+  // Languages data
+  const languagesList = useMemo(() => {
+    if (languagesRaw && languagesRaw.length > 0) {
+      return languagesRaw.map((l) => ({
+        name: l.language || l.name,
+        percentage: Number(l.percentage || 0),
+        bytes: Number(l.bytes || 0),
+      }));
+    }
+    return [];
+  }, [languagesRaw]);
 
-  const recentContributions =
-    useMemo(() => {
+  // Last 30 days bar chart data
+  const recent30Days = useMemo(() => {
+    if (!dailyContributions || dailyContributions.length === 0) return [];
+    return dailyContributions.slice(-30).map((item) => {
+      const dateStr = item.date || item.day;
+      let label = dateStr;
+      if (dateStr) {
+        try {
+          const d = new Date(dateStr);
+          label = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        } catch {
+          label = dateStr;
+        }
+      }
+      return {
+        day: label,
+        formattedDate: dateStr,
+        contributions: Number(item.count ?? item.contributions ?? 0),
+      };
+    });
+  }, [dailyContributions]);
 
-      if (
-        dailyContributions.length <= 30
-      ) {
-        return dailyContributions;
+  const total30DayContributions = useMemo(() => {
+    return recent30Days.reduce((sum, d) => sum + d.contributions, 0);
+  }, [recent30Days]);
+
+  // Streak & Milestone numbers from authentic telemetry
+  const currentStreak = streak?.current_streak ?? 0;
+  const longestStreak = streak?.longest_streak ?? 0;
+  const totalActiveDays = streak?.total_active_days ?? 0;
+  const githubStreak = githubStats?.streak?.current_streak ?? 0;
+  const totalContributions = githubStats?.streak?.total_contributions ?? (githubStats?.commits?.total ?? 0);
+
+  // GitHub Counts
+  const repoCount = githubStats?.repositories?.total ?? (githubStats?.repositories?.public ?? 0);
+  const commitCount = githubStats?.commits?.total ?? 0;
+  const activeEventsCount = githubStats?.activity?.total ?? (githubStats?.activity?.recent_events?.length ?? 0);
+  const ghUsername = githubStatus?.github?.username || githubStats?.user?.username || (githubStatus?.connected ? "connected-user" : null);
+
+  // Platforms model derived dynamically from /dashboard/overview with authentic integration states
+  const platformsData = useMemo(() => {
+    const overviewPlatforms = dashboardOverview?.platforms || {};
+    const activeTodayList = streak?.today_platforms || [];
+
+    const supportedKeys = [
+      { key: "github", name: "GitHub", icon: "🐙", desc: "Commits, Repositories, PRs", defaultMode: "OAuth API" },
+      { key: "vscode", name: "VS Code Extension", icon: "⚡", desc: "IDE Active Coding Telemetry", defaultMode: "IDE Extension" },
+      { key: "leetcode", name: "LeetCode", icon: "💻", desc: "Problem Solving & Contests", defaultMode: "Public Profile" },
+      { key: "geeksforgeeks", name: "GeeksforGeeks", icon: "🟢", desc: "Coding Score & Practice", defaultMode: "Public Profile" },
+      { key: "freecodecamp", name: "freeCodeCamp", icon: "🔥", desc: "Web & Core Certifications", defaultMode: "Public Profile" },
+      { key: "nptel", name: "NPTEL", icon: "🎓", desc: "Academic Courses", defaultMode: "Manual Milestones" },
+      { key: "coursera", name: "Coursera", icon: "📚", desc: "Specializations & Modules", defaultMode: "Manual Milestones" },
+      { key: "linkedin", name: "LinkedIn", icon: "💼", desc: "Career Milestones & Profile", defaultMode: "Career Milestones" },
+      { key: "naukri", name: "Naukri", icon: "👔", desc: "Job Pipeline Tracking", defaultMode: "Career Milestones" },
+      { key: "pomodoro", name: "Pomodoro / Focus", icon: "⏱️", desc: "Deep Work Sessions", defaultMode: "Native Telemetry" },
+      { key: "tasks", name: "Tasks Engine", icon: "📋", desc: "Developer Task System", defaultMode: "Native Telemetry" },
+    ];
+
+    return supportedKeys.map((item) => {
+      const p = overviewPlatforms[item.key] || {};
+      const isConnected = Boolean(p.connected || item.key === "pomodoro" || item.key === "tasks");
+      const isActive = activeTodayList.includes(item.key) || Boolean(p.active_today);
+      const username = p.username || (item.key === "github" ? ghUsername : null);
+
+      let details = p.details || item.desc;
+      if (item.key === "github" && isConnected) {
+        details = `${repoCount} repos · ${commitCount} commits`;
+      } else if (item.key === "pomodoro") {
+        const sess = p.metrics?.today_completed_sessions ?? 0;
+        details = `${sess} focus session${sess === 1 ? "" : "s"} today`;
+      } else if (item.key === "tasks") {
+        const comp = p.metrics?.completed_tasks ?? 0;
+        const total = p.metrics?.total_tasks ?? 0;
+        details = `${comp}/${total} tasks completed`;
       }
 
-      return dailyContributions.slice(
-        -30
-      );
+      return {
+        key: item.key,
+        name: p.name || item.name,
+        icon: p.icon || item.icon,
+        desc: item.desc,
+        connected: isConnected,
+        activeToday: isActive,
+        username: username,
+        details: details,
+        connectionStatus: p.connection_status || (isConnected ? "Connected" : "Not Linked"),
+        integrationType: p.integration_type || p.sync_mode || item.defaultMode,
+        lastSyncStatus: p.last_sync_status || (isConnected ? "synced" : "idle"),
+      };
+    });
+  }, [dashboardOverview, streak, ghUsername, repoCount, commitCount]);
 
-    }, [dailyContributions]);
-
-
-  const contributionChartData =
-    recentContributions.map(
-      (item) => ({
-
-        day:
-          item.date
-            ? item.date.slice(5)
-            : "",
-
-        contributions:
-          item.count,
-
-      })
-    );
-
-
-  // =======================================================
-  // LANGUAGE DATA
-  // =======================================================
-
-  const languageChartData =
-    languages
-      .slice(0, 6)
-      .map((item) => ({
-        name: item.name,
-        value: item.value,
-      }));
-
-
-  // =======================================================
-  // TODAY'S PLATFORMS
-  // =======================================================
-
-  const activePlatforms =
-    streak?.today_platforms ?? [];
-
-
-  const activePlatformCount =
-    streak?.active_platform_count ??
-    activePlatforms.length;
-
-
-  // =======================================================
-  // LOADING
-  // =======================================================
-
-  if (loading) {
-
-    return (
-      <MainLayout>
-
-        <div className="min-h-[70vh] flex items-center justify-center">
-
-          <div className="text-center">
-
-            <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto" />
-
-            <p className="mt-4 text-gray-500">
-              Loading developer analytics...
-            </p>
-
-          </div>
-
-        </div>
-
-      </MainLayout>
-    );
-  }
-
+  const activePlatformCount = platformsData.filter((p) => p.activeToday).length;
+  const connectedPlatformCount = platformsData.filter((p) => p.connected).length;
+  const todaySummary = dashboardOverview?.today_summary || {};
 
   return (
-
     <MainLayout>
-
-      <div className="space-y-8 pb-10">
-
-
-        {/* =================================================
-            HEADER
-        ================================================= */}
-
-        <div>
-
-          <p className="text-blue-600 font-semibold text-sm">
-            Developer Analytics
-          </p>
-
-          <h1 className="text-3xl font-bold text-gray-900 mt-1">
-            Your Developer Performance
-          </h1>
-
-          <p className="text-gray-500 mt-2">
-            Track your coding activity, learning
-            consistency and developer growth.
-          </p>
-
-        </div>
-
-
-        {/* =================================================
-            ERROR
-        ================================================= */}
-
-        {error && (
-
-          <div className="bg-red-50 border border-red-200 text-red-700 px-5 py-4 rounded-xl">
-
-            {error}
-
+      <div className="space-y-8 pb-12">
+        {/* HEADER */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+                Live Analytics & Metrics
+              </span>
+              {lastSyncTime && (
+                <span className="text-xs text-slate-400 dark:text-slate-500">
+                  Last synced at {lastSyncTime}
+                </span>
+              )}
+            </div>
+            <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-1">
+              Developer Growth & Performance Analytics
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Real-time telemetry, 365-day contribution calendar, language distribution, and multi-platform streak tracking.
+            </p>
           </div>
 
+          <button
+            onClick={() => loadAnalytics(true)}
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-medium text-sm hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition shadow-xs cursor-pointer disabled:opacity-60"
+          >
+            <FaSyncAlt className={`text-blue-600 dark:text-blue-400 ${refreshing ? "animate-spin" : ""}`} />
+            <span>{refreshing ? "Syncing Analytics..." : "Refresh Analytics"}</span>
+          </button>
+        </div>
+
+        {/* ERROR NOTIFICATION */}
+        {error && (
+          <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300 px-5 py-4 rounded-2xl flex items-center justify-between text-sm">
+            <span className="flex items-center gap-2">
+              <FaExclamationTriangle />
+              {error}
+            </span>
+            <button
+              onClick={() => loadAnalytics(true)}
+              className="font-bold underline ml-4 cursor-pointer hover:text-rose-800 dark:hover:text-rose-200"
+            >
+              Retry
+            </button>
+          </div>
         )}
 
+        {/* 1. DEVELOPER STREAK HIGHLIGHT HERO */}
+        {loading ? (
+          <SkeletonCard className="h-56 bg-gradient-to-r from-orange-400/20 to-red-400/20" />
+        ) : (
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-orange-500 via-amber-600 to-red-600 text-white p-7 sm:p-9 shadow-xl border border-orange-400/30">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
 
-        {/* =================================================
-            DEVELOPER STREAK
-        ================================================= */}
+            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/20 backdrop-blur-md text-orange-100 text-xs font-semibold border border-white/15">
+                  <FaFire className="text-amber-300 animate-pulse" />
+                  <span>Developer Streak Engine</span>
+                </div>
 
-        <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl p-7 text-white shadow-lg">
-
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-
-            <div>
-
-              <div className="flex items-center gap-3">
-
-                <FaFire className="text-3xl" />
-
-                <h2 className="text-xl font-semibold">
-                  Developer Streak
+                <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                  Active Developer Momentum
                 </h2>
 
+                <div className="flex items-baseline gap-3">
+                  <span className="text-5xl sm:text-6xl font-black tracking-tight text-white drop-shadow-md">
+                    {currentStreak}
+                  </span>
+                  <span className="text-2xl font-bold text-orange-100">
+                    Consecutive Days Active
+                  </span>
+                </div>
+
+                <p className="text-sm text-orange-100/90 max-w-xl leading-relaxed">
+                  Earned across active GitHub commits, task completions, and platform problem solving. 
+                  {streak?.today_active ? " You have satisfied today's streak requirements! 🔥" : " Log an activity today to maintain your streak."}
+                </p>
               </div>
 
-              <p className="text-5xl font-bold mt-4">
-                {streak?.current_streak ?? 0}
-                <span className="text-2xl ml-2">
-                  Days
-                </span>
-              </p>
+              {/* Side Stats Container */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-3 bg-black/25 backdrop-blur-md rounded-2xl p-5 border border-white/15 min-w-[260px]">
+                <div className="border-b sm:border-b-0 lg:border-b border-white/10 pb-3 sm:pb-0 lg:pb-3">
+                  <p className="text-xs uppercase tracking-wider text-orange-200/80 font-semibold">
+                    Longest Streak
+                  </p>
+                  <p className="text-2xl font-black text-white mt-1">
+                    {longestStreak} <span className="text-sm font-semibold text-orange-200">days</span>
+                  </p>
+                </div>
 
-              <p className="mt-2 text-orange-100">
-                Stay active on at least one
-                developer platform every day.
-              </p>
+                <div className="border-b sm:border-b-0 lg:border-b border-white/10 pb-3 sm:pb-0 lg:pb-3">
+                  <p className="text-xs uppercase tracking-wider text-orange-200/80 font-semibold">
+                    Total Active Days
+                  </p>
+                  <p className="text-2xl font-black text-white mt-1">
+                    {totalActiveDays} <span className="text-sm font-semibold text-orange-200">days</span>
+                  </p>
+                </div>
 
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-orange-200/80 font-semibold">
+                    GitHub Streak
+                  </p>
+                  <p className="text-2xl font-black text-white mt-1">
+                    {githubStreak} <span className="text-sm font-semibold text-orange-200">days</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 2. 365-DAY GITHUB CONTRIBUTION HEATMAP */}
+        <ContributionHeatmap
+          dailyContributions={dailyContributions}
+          totalContributions={totalContributions}
+        />
+
+        {/* 3. GITHUB OVERVIEW & PERFORMANCE METRICS */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs dark:shadow-xl p-6 sm:p-8 transition-colors duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-2xl shadow-md">
+                <FaGithub />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  GitHub Verified Performance
+                  {ghUsername ? (
+                    <a
+                      href={`https://github.com/${ghUsername}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 font-semibold inline-flex items-center gap-1 transition"
+                    >
+                      @{ghUsername} <FaExternalLinkAlt className="text-[10px]" />
+                    </a>
+                  ) : (
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-semibold">
+                      Account Not Linked
+                    </span>
+                  )}
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Direct telemetry pulled from connected GitHub OAuth integration.
+                </p>
+              </div>
             </div>
 
-
-            <div className="bg-white/15 rounded-xl p-5 min-w-[220px]">
-
-              <p className="text-sm text-orange-100">
-                Longest Developer Streak
-              </p>
-
-              <p className="text-3xl font-bold mt-2">
-                {streak?.longest_streak ?? 0}
-                <span className="text-lg ml-1">
-                  days
-                </span>
-              </p>
-
-              <div className="h-px bg-white/20 my-4" />
-
-              <p className="text-sm text-orange-100">
-                Total Active Days
-              </p>
-
-              <p className="text-xl font-bold mt-1">
-                {streak?.total_active_days ?? 0}
-              </p>
-
-            </div>
-
+            {ghUsername ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                Connected & Synchronized
+              </span>
+            ) : (
+              <Link
+                to="/settings?tab=connected"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold transition"
+              >
+                Connect GitHub in Settings →
+              </Link>
+            )}
           </div>
 
+          {loading ? (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <SkeletonCard key={i} className="h-28" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100/80 dark:hover:bg-slate-800 transition rounded-2xl p-5 border border-slate-200/80 dark:border-slate-700/60">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Repositories
+                </span>
+                <p className="text-3xl font-extrabold text-slate-900 dark:text-white mt-2">
+                  {repoCount}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Public & accessible repos</p>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100/80 dark:hover:bg-slate-800 transition rounded-2xl p-5 border border-slate-200/80 dark:border-slate-700/60">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Total Commits
+                </span>
+                <p className="text-3xl font-extrabold text-blue-600 dark:text-blue-400 mt-2">
+                  {commitCount}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Across verified branches</p>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100/80 dark:hover:bg-slate-800 transition rounded-2xl p-5 border border-slate-200/80 dark:border-slate-700/60">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Total Contributions
+                </span>
+                <p className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-2">
+                  {totalContributions}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Commits, PRs & Reviews</p>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100/80 dark:hover:bg-slate-800 transition rounded-2xl p-5 border border-slate-200/80 dark:border-slate-700/60">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Active Events
+                </span>
+                <p className="text-3xl font-extrabold text-purple-600 dark:text-purple-400 mt-2">
+                  {activeEventsCount}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Recent Push & PR actions</p>
+              </div>
+            </div>
+          )}
         </div>
 
-
-        {/* =================================================
-            TODAY'S ACTIVITY
-        ================================================= */}
-
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-
-          <div className="flex items-center justify-between">
-
+        {/* 4. PROGRAMMING LANGUAGES & 30-DAY BAR CHART */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left: Languages breakdown */}
+          <div className="lg:col-span-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs dark:shadow-xl p-6 sm:p-8 flex flex-col justify-between transition-colors duration-200">
             <div>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center text-lg">
+                    <FaCode />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                      Language Distribution
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Detected across your {repoCount} repositories ({languagesList.length} languages total).
+                    </p>
+                  </div>
+                </div>
 
-              <h2 className="text-xl font-bold text-gray-900">
-                Today's Developer Activity
-              </h2>
+                <span className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 px-2.5 py-1 rounded-full border border-purple-200 dark:border-purple-800/60">
+                  {languagesList.length} Detected
+                </span>
+              </div>
 
-              <p className="text-sm text-gray-500 mt-1">
-                Platforms active today
-              </p>
+              {loading ? (
+                <SkeletonCard className="h-64" />
+              ) : languagesList.length > 0 ? (
+                <div className="space-y-6">
+                  <LanguageUsageChart languages={languagesList} />
 
+                  <div className="space-y-3 pt-2">
+                    {languagesList.slice(0, 5).map((lang, idx) => {
+                      const colors = [
+                        "bg-blue-600",
+                        "bg-amber-500",
+                        "bg-emerald-500",
+                        "bg-purple-600",
+                        "bg-rose-500",
+                      ];
+                      return (
+                        <div key={lang.name} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                              <span className={`w-2.5 h-2.5 rounded-full ${colors[idx % colors.length]}`} />
+                              {lang.name}
+                            </span>
+                            <span className="text-slate-500 dark:text-slate-400 font-medium">
+                              {lang.percentage > 0 ? `${lang.percentage}%` : ""}
+                              {lang.bytes > 0 && (
+                                <span className="text-slate-400 dark:text-slate-500 text-[11px] ml-1.5">
+                                  ({(lang.bytes / (1024 * 1024)).toFixed(2)} MB)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${colors[idx % colors.length]} transition-all duration-700`}
+                              style={{ width: `${Math.max(4, lang.percentage)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
+                  No repository language statistics detected.
+                </div>
+              )}
             </div>
 
-            <div className="text-right">
-
-              <p className="text-2xl font-bold text-blue-600">
-                {activePlatformCount} / 6
-              </p>
-
-              <p className="text-xs text-gray-500">
-                platforms active
-              </p>
-
+            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-500 flex items-center justify-between">
+              <span>
+                Primary Stack: {languagesList.slice(0, 3).map((l) => l.name).join(", ") || "No languages recorded"}
+              </span>
+              <span>Source: GitHub API</span>
             </div>
-
           </div>
 
+          {/* Right: Last 30 Days Bar Chart */}
+          <div className="lg:col-span-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs dark:shadow-xl p-6 sm:p-8 flex flex-col justify-between transition-colors duration-200">
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center text-lg">
+                    <FaChartLine />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                      30-Day Activity Trend
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Daily contribution distribution across the last month.
+                    </p>
+                  </div>
+                </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mt-6">
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-3 py-1 rounded-full border border-blue-100 dark:border-blue-900/60">
+                  {total30DayContributions} Contributions
+                </span>
+              </div>
 
-            {PLATFORMS.map(
-              (platform) => {
+              {loading ? (
+                <SkeletonCard className="h-64" />
+              ) : recent30Days.length > 0 ? (
+                <div className="h-[280px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={recent30Days} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.15)" />
+                      <XAxis
+                        dataKey="day"
+                        stroke="#94a3b8"
+                        fontSize={10}
+                        tickLine={false}
+                        interval={2}
+                      />
+                      <YAxis
+                        allowDecimals={false}
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <Tooltip content={<Custom30DayTooltip />} cursor={{ fill: "rgba(148, 163, 184, 0.1)", radius: 6 }} />
+                      <Bar dataKey="contributions" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
+                  No 30-day activity data available.
+                </div>
+              )}
+            </div>
 
-                const active =
-                  activePlatforms.includes(
-                    platform.key
-                  );
+            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-500 flex items-center justify-between">
+              <span>Updated daily from verified calendar</span>
+              <span>Normalized ISO Dates</span>
+            </div>
+          </div>
+        </div>
 
-                return (
+        {/* 5. TODAY'S TELEMETRY DOMAIN BREAKDOWN */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs dark:shadow-xl p-6 sm:p-8 transition-colors duration-200">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                Activity Engine Telemetry Breakdown
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Today's tracked hours and discrete actions across all developer domains.
+              </p>
+            </div>
+          </div>
 
-                  <div
-                    key={platform.key}
-                    className={`rounded-xl border p-4 transition ${
-                      active
-                        ? "border-green-300 bg-green-50"
-                        : "border-gray-200 bg-gray-50"
-                    }`}
-                  >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20 p-5 flex flex-col justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base">
+                  <FaCode />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white">Coding & Repos</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Live development</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <p className="text-2xl font-black text-slate-900 dark:text-white">
+                  {formatDuration(todaySummary.coding_seconds)}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  {todaySummary.github_activities_today > 0
+                    ? `${todaySummary.github_activities_today} GitHub action${todaySummary.github_activities_today > 1 ? "s" : ""} logged today`
+                    : "Active coding time"}
+                </p>
+              </div>
+            </div>
 
+            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 p-5 flex flex-col justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-base">
+                  <FaGraduationCap />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white">Learning & Theory</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Coursera, NPTEL, FCC</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <p className="text-2xl font-black text-slate-900 dark:text-white">
+                  {formatDuration(todaySummary.learning_seconds)}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Course modules & theory</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 p-5 flex flex-col justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-base">
+                  <FaBrain />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white">Problem Solving</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">LeetCode & GFG</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <p className="text-2xl font-black text-slate-900 dark:text-white">
+                  {formatDuration(todaySummary.problem_solving_seconds)}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Algorithm practice</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-purple-200 dark:border-purple-900/50 bg-purple-50/50 dark:bg-purple-950/20 p-5 flex flex-col justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center text-base">
+                  <FaClock />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white">Deep Focus</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Pomodoro Sprints</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <p className="text-2xl font-black text-slate-900 dark:text-white">
+                  {formatDuration(todaySummary.focus_seconds)}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  {todaySummary.focus_seconds > 0 ? "Focus sessions recorded today" : "No active focus timer today"}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 6. MULTI-PLATFORM ACTIVE STATUS GRID */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs dark:shadow-xl p-6 sm:p-8 transition-colors duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                Connected Platforms & Telemetry Synchronization
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Real status derived from backend integration models and today's activity stream.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+                {activePlatformCount} Active Today
+              </span>
+              <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                {connectedPlatformCount} / {platformsData.length} Connected
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {platformsData.map((platform) => {
+              const isActive = platform.activeToday;
+              const isConnected = platform.connected;
+              const status = platform.connectionStatus;
+
+              return (
+                <div
+                  key={platform.key}
+                  className={`rounded-2xl border p-4.5 transition-all flex flex-col justify-between ${
+                    isActive
+                      ? "border-emerald-300 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/30 shadow-xs"
+                      : isConnected
+                      ? "border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60"
+                      : "border-slate-200/60 dark:border-slate-800/60 bg-slate-50/40 dark:bg-slate-900/40 opacity-70"
+                  }`}
+                >
+                  <div>
                     <div className="flex items-center justify-between">
-
-                      <span className="text-2xl">
-                        {platform.icon}
-                      </span>
-
-                      {active && (
-
-                        <FaCheckCircle className="text-green-500" />
-
+                      <span className="text-2xl">{platform.icon}</span>
+                      {isActive ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                          <FaCheckCircle className="text-[10px]" />
+                          Active Today
+                        </span>
+                      ) : status === "Built-in Active" ? (
+                        <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                          Built-in Active
+                        </span>
+                      ) : status === "Profile Linked" ? (
+                        <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
+                          Profile Linked
+                        </span>
+                      ) : status === "Manual Tracking" ? (
+                        <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                          Manual Tracking
+                        </span>
+                      ) : isConnected ? (
+                        <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
+                          Connected & Synced
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500 bg-slate-200/60 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                          Not Connected
+                        </span>
                       )}
-
                     </div>
 
-                    <p className="font-semibold text-gray-800 mt-3 text-sm">
+                    <p className="font-bold text-slate-900 dark:text-white mt-3 text-sm">
                       {platform.name}
                     </p>
 
-                    <p
-                      className={`text-xs mt-1 ${
-                        active
-                          ? "text-green-600"
-                          : "text-gray-400"
-                      }`}
-                    >
-                      {active
-                        ? "Active today"
-                        : "No activity"}
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 font-medium truncate">
+                      {platform.username ? `@${platform.username}` : platform.desc}
                     </p>
-
                   </div>
 
-                );
-              }
-            )}
-
+                  <div className="mt-4 pt-2.5 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span className="truncate">{platform.details}</span>
+                    <span className="shrink-0 font-medium">
+                      {status === "Manual Tracking" ? "Manual" : isConnected ? "✓ Synced" : "Not Linked"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-
-        </div>
-
-
-        {/* =================================================
-            GITHUB PERFORMANCE
-        ================================================= */}
-
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-
-          <div className="flex items-center gap-4 mb-6">
-
-            <div className="w-12 h-12 rounded-xl bg-gray-900 text-white flex items-center justify-center">
-
-              <FaGithub className="text-2xl" />
-
-            </div>
-
-            <div>
-
-              <h2 className="text-xl font-bold text-gray-900">
-                GitHub Performance
-              </h2>
-
-              <p className="text-sm text-gray-500">
-                Statistics from your connected GitHub account.
-              </p>
-
-            </div>
-
-          </div>
-
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-
-            <div className="bg-gray-50 rounded-xl p-5">
-
-              <p className="text-sm text-gray-500">
-                Repositories
-              </p>
-
-              <p className="text-3xl font-bold mt-2">
-                {githubStats?.repositories ?? 0}
-              </p>
-
-            </div>
-
-
-            <div className="bg-gray-50 rounded-xl p-5">
-
-              <p className="text-sm text-gray-500">
-                Commits
-              </p>
-
-              <p className="text-3xl font-bold mt-2">
-                {githubStats?.commits ?? 0}
-              </p>
-
-            </div>
-
-
-            <div className="bg-gray-50 rounded-xl p-5">
-
-              <p className="text-sm text-gray-500">
-                Pull Requests
-              </p>
-
-              <p className="text-3xl font-bold mt-2">
-                {githubStats?.pullRequests ?? 0}
-              </p>
-
-            </div>
-
-
-            <div className="bg-gray-50 rounded-xl p-5">
-
-              <p className="text-sm text-gray-500">
-                Issues
-              </p>
-
-              <p className="text-3xl font-bold mt-2">
-                {githubStats?.issues ?? 0}
-              </p>
-
-            </div>
-
-          </div>
-
-        </div>
-
-
-        {/* =================================================
-            DAILY CODING ACTIVITY
-        ================================================= */}
-
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-
-          <div className="flex items-center justify-between mb-6">
-
-            <div className="flex items-center gap-3">
-
-              <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-
-                <FaChartLine />
-
-              </div>
-
-              <div>
-
-                <h2 className="text-xl font-bold">
-                  Daily Coding Activity
-                </h2>
-
-                <p className="text-sm text-gray-500">
-                  GitHub contributions over the last 30 days.
-                </p>
-
-              </div>
-
-            </div>
-
-            <div className="text-right">
-
-              <p className="text-xs text-gray-500">
-                Last 30 days
-              </p>
-
-              <p className="text-lg font-bold text-blue-600">
-
-                {recentContributions.reduce(
-                  (sum, item) =>
-                    sum + item.count,
-                  0
-                )}
-
-              </p>
-
-            </div>
-
-          </div>
-
-
-          {contributionChartData.length > 0 ? (
-
-            <div className="h-[320px]">
-
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-
-                <BarChart
-                  data={
-                    contributionChartData
-                  }
-                >
-
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                  />
-
-                  <XAxis
-                    dataKey="day"
-                  />
-
-                  <YAxis
-                    allowDecimals={false}
-                  />
-
-                  <Tooltip />
-
-                  <Bar
-                    dataKey="contributions"
-                    fill="#3b82f6"
-                    radius={[
-                      6,
-                      6,
-                      0,
-                      0,
-                    ]}
-                  />
-
-                </BarChart>
-
-              </ResponsiveContainer>
-
-            </div>
-
-          ) : (
-
-            <div className="h-[260px] flex items-center justify-center bg-gray-50 rounded-xl">
-
-              <div className="text-center">
-
-                <FaCode className="text-3xl text-gray-300 mx-auto" />
-
-                <p className="text-gray-400 mt-3">
-                  No GitHub contribution data available.
-                </p>
-
-              </div>
-
-            </div>
-
-          )}
-
-        </div>
-
-
-        {/* =================================================
-            LANGUAGE USAGE
-        ================================================= */}
-
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-
-          <div className="flex items-center gap-3 mb-6">
-
-            <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-
-              <FaCode />
-
-            </div>
-
-            <div>
-
-              <h2 className="text-xl font-bold">
-                Language Usage
-              </h2>
-
-              <p className="text-sm text-gray-500">
-                Languages detected across your GitHub repositories.
-              </p>
-
-            </div>
-
-          </div>
-
-
-          {languageChartData.length > 0 ? (
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-
-              <div className="h-[280px]">
-
-                <ResponsiveContainer
-                  width="100%"
-                  height="100%"
-                >
-
-                  <PieChart>
-
-                    <Pie
-                      data={
-                        languageChartData
-                      }
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={100}
-                      label
-                    >
-
-                      {languageChartData.map(
-                        (_, index) => (
-
-                          <Cell
-                            key={
-                              `language-${index}`
-                            }
-                            fill={
-                              [
-                                "#3b82f6",
-                                "#8b5cf6",
-                                "#10b981",
-                                "#f59e0b",
-                                "#ef4444",
-                                "#06b6d4",
-                              ][
-                                index %
-                                6
-                              ]
-                            }
-                          />
-
-                        )
-                      )}
-
-                    </Pie>
-
-                    <Tooltip />
-
-                  </PieChart>
-
-                </ResponsiveContainer>
-
-              </div>
-
-
-              <div className="space-y-3">
-
-                {languageChartData.map(
-                  (language, index) => (
-
-                    <div
-                      key={
-                        language.name
-                      }
-                      className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3"
-                    >
-
-                      <div className="flex items-center gap-3">
-
-                        <span
-                          className="w-3 h-3 rounded-full"
-                          style={{
-                            backgroundColor:
-                              [
-                                "#3b82f6",
-                                "#8b5cf6",
-                                "#10b981",
-                                "#f59e0b",
-                                "#ef4444",
-                                "#06b6d4",
-                              ][
-                                index %
-                                6
-                              ],
-                          }}
-                        />
-
-                        <span className="font-medium">
-                          {language.name}
-                        </span>
-
-                      </div>
-
-                      <span className="text-gray-500">
-                        {language.value}
-                      </span>
-
-                    </div>
-
-                  )
-                )}
-
-              </div>
-
-            </div>
-
-          ) : (
-
-            <div className="h-[180px] flex items-center justify-center bg-gray-50 rounded-xl">
-
-              <p className="text-gray-400">
-                No language data available.
-              </p>
-
-            </div>
-
-          )}
-
-        </div>
-
-
-        {/* =================================================
-            QUICK SUMMARY
-        ================================================= */}
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-
-            <div className="flex items-center gap-3">
-
-              <FaFire className="text-orange-500" />
-
-              <span className="text-sm text-gray-500">
-                Current Developer Streak
-              </span>
-
-            </div>
-
-            <p className="text-3xl font-bold mt-3">
-              {streak?.current_streak ?? 0}
-              <span className="text-sm font-normal text-gray-500 ml-1">
-                days
-              </span>
-            </p>
-
-          </div>
-
-
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-
-            <div className="flex items-center gap-3">
-
-              <FaTrophy className="text-yellow-500" />
-
-              <span className="text-sm text-gray-500">
-                Best Streak
-              </span>
-
-            </div>
-
-            <p className="text-3xl font-bold mt-3">
-              {streak?.longest_streak ?? 0}
-              <span className="text-sm font-normal text-gray-500 ml-1">
-                days
-              </span>
-            </p>
-
-          </div>
-
-
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-
-            <div className="flex items-center gap-3">
-
-              <FaCheckCircle className="text-green-500" />
-
-              <span className="text-sm text-gray-500">
-                Active Platforms Today
-              </span>
-
-            </div>
-
-            <p className="text-3xl font-bold mt-3">
-              {activePlatformCount}
-              <span className="text-sm font-normal text-gray-500 ml-1">
-                / 6
-              </span>
-            </p>
-
-          </div>
-
-        </div>
-
-
-        {/* =================================================
-            REFRESH
-        ================================================= */}
-
-        <div className="flex justify-center">
-
-          <button
-            onClick={loadAnalytics}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition shadow-sm"
-          >
-            Refresh Analytics
-          </button>
-
         </div>
 
       </div>
-
     </MainLayout>
   );
 };

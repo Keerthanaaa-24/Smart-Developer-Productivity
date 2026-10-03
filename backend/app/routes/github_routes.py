@@ -1,37 +1,22 @@
 import os
-
 from datetime import datetime, timedelta
-
-from urllib.parse import urlencode
-
+from urllib.parse import urlencode, quote_plus
 import httpx
-
 from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
 )
-from app.services.activity_service import (
-    log_developer_activity,
-)
 from fastapi.responses import RedirectResponse
-
-from fastapi.security import OAuth2PasswordBearer
-
 from jose import jwt, JWTError
-
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-
 from app.core.oauth2 import get_current_user
-
+from app.core.encryption import encrypt_token, decrypt_token
 from app.models.user import User
-
-from app.models.github_connection import (
-    GitHubConnection,
-)
-
+from app.models.github_connection import GitHubConnection
+from app.services.activity_service import log_developer_activity
 from app.services.github_service import (
     get_github_profile,
     get_github_repositories,
@@ -44,9 +29,12 @@ from app.services.github_service import (
     get_github_contribution_streak,
     get_github_daily_contributions,
 )
-
 from app.services.developer_streak_service import (
     record_activity,
+    get_developer_streak,
+)
+from app.services.unified_activity_service import (
+    record_unified_activity,
 )
 
 
@@ -60,89 +48,29 @@ router = APIRouter(
 # CONFIGURATION
 # =========================================================
 
-GITHUB_CLIENT_ID = os.getenv(
-    "GITHUB_CLIENT_ID"
-)
-
-GITHUB_CLIENT_SECRET = os.getenv(
-    "GITHUB_CLIENT_SECRET"
-)
-
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 GITHUB_REDIRECT_URI = os.getenv(
     "GITHUB_REDIRECT_URI",
-    "http://127.0.0.1:8000/github/callback",
+    "http://127.0.0.1:8001/github/callback",
 )
+SECRET_KEY = os.getenv("SECRET_KEY", "mysecretkey")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
-SECRET_KEY = os.getenv(
-    "SECRET_KEY",
-    "mysecretkey",
-)
-
-ALGORITHM = os.getenv(
-    "ALGORITHM",
-    "HS256",
-)
-
-FRONTEND_URL = os.getenv(
-    "FRONTEND_URL",
-    "http://localhost:5173",
-)
-
-GITHUB_AUTHORIZE_URL = (
-    "https://github.com/login/oauth/authorize"
-)
-
-GITHUB_TOKEN_URL = (
-    "https://github.com/login/oauth/access_token"
-)
-
-GITHUB_USER_URL = (
-    "https://api.github.com/user"
-)
+GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
+GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
+GITHUB_USER_URL = "https://api.github.com/user"
 
 
 # =========================================================
 # AUTHENTICATION
 # =========================================================
 
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/auth/login"
-)
-
-
 def get_current_user_id(
-    token: str = Depends(oauth2_scheme),
-):
-
-    try:
-
-        payload = jwt.decode(
-            token,
-            SECRET_KEY,
-            algorithms=[ALGORITHM],
-        )
-
-        user_id = payload.get("sub")
-
-        if not user_id:
-
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid authentication token",
-            )
-
-        return int(user_id)
-
-    except (
-        JWTError,
-        ValueError,
-        TypeError,
-    ):
-
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authentication token",
-        )
+    current_user: User = Depends(get_current_user),
+) -> int:
+    return current_user.id
 
 
 # =========================================================
@@ -151,20 +79,15 @@ def get_current_user_id(
 
 @router.get("/login")
 def github_login(
-    user_id: int = Depends(
-        get_current_user_id
-    ),
+    user_id: int = Depends(get_current_user_id),
 ):
-
     if not GITHUB_CLIENT_ID:
-
         raise HTTPException(
             status_code=500,
             detail="GITHUB_CLIENT_ID is not configured",
         )
 
     if not GITHUB_CLIENT_SECRET:
-
         raise HTTPException(
             status_code=500,
             detail="GITHUB_CLIENT_SECRET is not configured",
@@ -173,10 +96,7 @@ def github_login(
     state_payload = {
         "user_id": user_id,
         "purpose": "github_oauth",
-        "exp": (
-            datetime.utcnow()
-            + timedelta(minutes=10)
-        ),
+        "exp": datetime.utcnow() + timedelta(minutes=10),
     }
 
     state = jwt.encode(
@@ -193,15 +113,9 @@ def github_login(
         "allow_signup": "false",
     }
 
-    authorization_url = (
-        f"{GITHUB_AUTHORIZE_URL}?"
-        f"{urlencode(params)}"
-    )
+    authorization_url = f"{GITHUB_AUTHORIZE_URL}?{urlencode(params)}"
 
-    return {
-        "authorization_url":
-            authorization_url
-    }
+    return {"authorization_url": authorization_url}
 
 
 # =========================================================
@@ -216,261 +130,230 @@ async def github_callback(
     error_description: str | None = None,
     db: Session = Depends(get_db),
 ):
-
     if error:
-
-        message = (
-            error_description
-            or error
-        )
-
+        message = quote_plus(error_description or error or "GitHub authorization was denied or cancelled")
         return RedirectResponse(
-            url=(
-                f"{FRONTEND_URL}/settings"
-                f"?github=error"
-                f"&message={message}"
-            )
+            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={message}"
         )
 
     if not code:
-
-        raise HTTPException(
-            status_code=400,
-            detail="GitHub authorization code is missing",
+        err_msg = quote_plus("GitHub authorization code is missing")
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     if not state:
-
-        raise HTTPException(
-            status_code=400,
-            detail="GitHub OAuth state is missing",
+        err_msg = quote_plus("GitHub OAuth state parameter is missing")
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     try:
-
         state_data = jwt.decode(
             state,
             SECRET_KEY,
             algorithms=[ALGORITHM],
         )
 
-        user_id = state_data.get(
-            "user_id"
-        )
+        user_id = state_data.get("user_id")
+        purpose = state_data.get("purpose")
 
-        purpose = state_data.get(
-            "purpose"
-        )
-
-        if not user_id:
-
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid GitHub OAuth state",
-            )
-
-        if purpose != "github_oauth":
-
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid GitHub OAuth state",
+        if not user_id or purpose != "github_oauth":
+            err_msg = quote_plus("Invalid GitHub OAuth state payload")
+            return RedirectResponse(
+                url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
             )
 
     except JWTError:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid or expired GitHub OAuth state",
+        err_msg = quote_plus("Invalid or expired GitHub OAuth state token")
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     application_user = (
         db.query(User)
-        .filter(
-            User.id == int(user_id)
-        )
+        .filter(User.id == int(user_id))
         .first()
     )
 
     if not application_user:
-
-        raise HTTPException(
-            status_code=404,
-            detail="Application user not found",
+        err_msg = quote_plus("Associated application user account not found")
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     # -----------------------------------------------------
     # Exchange authorization code
     # -----------------------------------------------------
 
-    async with httpx.AsyncClient(
-        timeout=20.0
-    ) as client:
-
+    async with httpx.AsyncClient(timeout=20.0) as client:
         token_response = await client.post(
             GITHUB_TOKEN_URL,
             data={
-                "client_id":
-                    GITHUB_CLIENT_ID,
-
-                "client_secret":
-                    GITHUB_CLIENT_SECRET,
-
-                "code":
-                    code,
-
-                "redirect_uri":
-                    GITHUB_REDIRECT_URI,
+                "client_id": GITHUB_CLIENT_ID,
+                "client_secret": GITHUB_CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": GITHUB_REDIRECT_URI,
             },
-            headers={
-                "Accept":
-                    "application/json",
-            },
+            headers={"Accept": "application/json"},
         )
 
     if token_response.status_code != 200:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Failed to exchange GitHub authorization code",
+        err_msg = quote_plus("Failed to exchange GitHub authorization code")
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     token_data = token_response.json()
-
-    access_token = token_data.get(
-        "access_token"
-    )
+    access_token = token_data.get("access_token")
 
     if not access_token:
-
-        raise HTTPException(
-            status_code=400,
-            detail="GitHub did not return an access token",
+        err_msg = quote_plus(token_data.get("error_description") or "GitHub did not return an access token")
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     # -----------------------------------------------------
-    # Get GitHub user
+    # Get GitHub user identity
     # -----------------------------------------------------
 
-    async with httpx.AsyncClient(
-        timeout=20.0
-    ) as client:
-
+    async with httpx.AsyncClient(timeout=20.0) as client:
         github_response = await client.get(
             GITHUB_USER_URL,
             headers={
-                "Accept":
-                    "application/vnd.github+json",
-
-                "Authorization":
-                    f"Bearer {access_token}",
-
-                "X-GitHub-Api-Version":
-                    "2022-11-28",
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {access_token}",
+                "X-GitHub-Api-Version": "2022-11-28",
             },
         )
 
     if github_response.status_code != 200:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Unable to retrieve GitHub account",
+        err_msg = quote_plus("Unable to retrieve profile from GitHub API")
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     github_user = github_response.json()
-
-    github_id = str(
-        github_user.get("id")
-    )
-
-    github_username = (
-        github_user.get("login")
-    )
+    github_id = str(github_user.get("id"))
+    github_username = github_user.get("login")
 
     if not github_id or not github_username:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid GitHub account information",
+        err_msg = quote_plus("Invalid GitHub account profile information received")
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
         )
 
+    # Encrypt access token at rest
+    encrypted_token = encrypt_token(access_token)
+
     # -----------------------------------------------------
-    # Save connection
+    # Multi-User Identity Protection & Safe Re-Linking
     # -----------------------------------------------------
 
-    connection = (
+    existing_github = (
         db.query(GitHubConnection)
-        .filter(
-            GitHubConnection.user_id
-            == int(user_id)
-        )
+        .filter(GitHubConnection.github_id == github_id)
         .first()
     )
 
-    if connection:
+    is_relinked = False
+    if existing_github and existing_github.user_id != int(user_id):
+        # Authenticated user verified ownership via OAuth: safely transfer / re-link to active account
+        existing_github.user_id = int(user_id)
+        existing_github.github_username = github_username
+        existing_github.github_name = github_user.get("name")
+        existing_github.github_email = github_user.get("email")
+        existing_github.avatar_url = github_user.get("avatar_url")
+        existing_github.profile_url = f"https://github.com/{github_username}"
+        existing_github.access_token = encrypted_token
+        existing_github.token_expired = False
+        existing_github.last_sync_status = "success"
 
-        connection.github_id = github_id
-
-        connection.github_username = (
-            github_username
-        )
-
-        connection.github_name = (
-            github_user.get("name")
-        )
-
-        connection.github_email = (
-            github_user.get("email")
-        )
-
-        connection.avatar_url = (
-            github_user.get("avatar_url")
-        )
-
-        connection.access_token = (
-            access_token
-        )
-
-    else:
-
-        existing_github = (
+        # Remove any other GitHub connection row for this user to maintain strict 1-to-1 mapping
+        other_conn = (
             db.query(GitHubConnection)
             .filter(
-                GitHubConnection.github_id
-                == github_id
+                GitHubConnection.user_id == int(user_id),
+                GitHubConnection.id != existing_github.id,
             )
             .first()
         )
+        if other_conn:
+            db.delete(other_conn)
 
-        if existing_github:
-
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "This GitHub account is already "
-                    "connected to another account."
-                ),
-            )
-
-        connection = GitHubConnection(
-            user_id=int(user_id),
-            github_id=github_id,
-            github_username=github_username,
-            github_name=github_user.get("name"),
-            github_email=github_user.get("email"),
-            avatar_url=github_user.get("avatar_url"),
-            access_token=access_token,
+        db.commit()
+        is_relinked = True
+    else:
+        # Save or update connection for current application user
+        connection = (
+            db.query(GitHubConnection)
+            .filter(GitHubConnection.user_id == int(user_id))
+            .first()
         )
 
-        db.add(connection)
+        if connection:
+            connection.github_id = github_id
+            connection.github_username = github_username
+            connection.github_name = github_user.get("name")
+            connection.github_email = github_user.get("email")
+            connection.avatar_url = github_user.get("avatar_url")
+            connection.profile_url = f"https://github.com/{github_username}"
+            connection.access_token = encrypted_token
+            connection.token_expired = False
+            connection.last_sync_status = "success"
+        else:
+            connection = GitHubConnection(
+                user_id=int(user_id),
+                github_id=github_id,
+                github_username=github_username,
+                github_name=github_user.get("name"),
+                github_email=github_user.get("email"),
+                avatar_url=github_user.get("avatar_url"),
+                profile_url=f"https://github.com/{github_username}",
+                access_token=encrypted_token,
+                token_expired=False,
+                last_sync_status="success",
+            )
+            db.add(connection)
 
+        db.commit()
+
+    status_param = "relinked" if is_relinked else "connected"
+    return RedirectResponse(
+        url=f"{FRONTEND_URL}/settings?tab=connected&github={status_param}&username={quote_plus(github_username)}"
+    )
+
+
+# =========================================================
+# DISCONNECT (Preserves historical developer activities)
+# =========================================================
+
+@router.delete("/disconnect")
+@router.post("/disconnect")
+def github_disconnect(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    connection = (
+        db.query(GitHubConnection)
+        .filter(GitHubConnection.user_id == user_id)
+        .first()
+    )
+
+    if not connection:
+        raise HTTPException(
+            status_code=404,
+            detail="No connected GitHub account found to disconnect",
+        )
+
+    # Delete the connection record without deleting DeveloperActivity history
+    db.delete(connection)
     db.commit()
 
-    return RedirectResponse(
-        url=(
-            f"{FRONTEND_URL}/settings"
-            f"?github=connected"
-        )
-    )
+    return {
+        "message": "GitHub account disconnected successfully",
+        "history_preserved": True,
+    }
 
 
 # =========================================================
@@ -957,69 +840,40 @@ async def github_languages(
 
 
 # =========================================================
+# =========================================================
 # RECENT ACTIVITY
 # =========================================================
 
 @router.get("/activity")
 async def github_activity(
-    user_id: int = Depends(
-        get_current_user_id
-    ),
+    user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-
     connection = (
         db.query(GitHubConnection)
-        .filter(
-            GitHubConnection.user_id
-            == user_id
-        )
+        .filter(GitHubConnection.user_id == user_id)
         .first()
     )
 
     if not connection:
-
         raise HTTPException(
             status_code=404,
             detail="GitHub account is not connected",
         )
 
     try:
-
         activity = await get_github_activity(
             connection.access_token,
             connection.github_username,
         )
 
-        # -------------------------------------------------
-        # GitHub activity counts toward the developer streak
-        # -------------------------------------------------
-
-        if activity:
-
-            record_activity(
-                db=db,
-                user_id=user_id,
-                platform="github",
-                activity_type="github_activity",
-                activity_count=1,
-            )
-
         return {
-            "count":
-                len(activity),
-
-            "activity":
-                activity,
+            "count": len(activity),
+            "activity": activity,
         }
 
     except Exception as error:
-
-        print(
-            "GitHub activity error:",
-            error
-        )
-
+        print("GitHub activity error:", error)
         raise HTTPException(
             status_code=502,
             detail="Unable to fetch GitHub activity",
@@ -1032,55 +886,30 @@ async def github_activity(
 
 @router.get("/statistics")
 async def github_statistics(
-    user_id: int = Depends(
-        get_current_user_id
-    ),
+    user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-
     connection = (
         db.query(GitHubConnection)
-        .filter(
-            GitHubConnection.user_id == user_id
-        )
+        .filter(GitHubConnection.user_id == user_id)
         .first()
     )
 
     if not connection:
-
         raise HTTPException(
             status_code=404,
             detail="GitHub account is not connected",
         )
 
     try:
-
         statistics = await get_github_statistics(
             connection.access_token,
             connection.github_username,
         )
-
-        # GitHub statistics request also confirms
-        # that the connected developer is active.
-        if statistics:
-
-            record_activity(
-                db=db,
-                user_id=user_id,
-                platform="github",
-                activity_type="github_statistics",
-                activity_count=1,
-            )
-
         return statistics
 
     except Exception as error:
-
-        print(
-            "GitHub statistics error:",
-            error,
-        )
-
+        print("GitHub statistics error:", error)
         raise HTTPException(
             status_code=502,
             detail="Unable to fetch GitHub statistics",
@@ -1093,41 +922,44 @@ async def github_statistics(
 
 @router.get("/streak")
 async def github_streak(
-    user_id: int = Depends(
-        get_current_user_id
-    ),
+    user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-
     connection = (
         db.query(GitHubConnection)
-        .filter(
-            GitHubConnection.user_id == user_id
-        )
+        .filter(GitHubConnection.user_id == user_id)
         .first()
     )
 
     if not connection:
-
         raise HTTPException(
             status_code=404,
             detail="GitHub account is not connected",
         )
 
     try:
+        # 1. Unified streak from developer streak service
+        unified = get_developer_streak(db, user_id)
 
-        return await get_github_contribution_streak(
+        # 2. Raw GitHub contribution calendar metrics
+        cal_streak = await get_github_contribution_streak(
             connection.access_token,
             connection.github_username,
         )
 
+        return {
+            "current_streak": unified["current_streak"],
+            "longest_streak": unified["longest_streak"],
+            "today_active": unified["today_active"],
+            "today_platforms": unified["today_platforms"],
+            "total_active_days": unified["total_active_days"],
+            "last_active_date": unified["last_active_date"],
+            "github_total_contributions": cal_streak.get("total_contributions", 0),
+            "github_calendar_streak": cal_streak.get("current_streak", 0),
+        }
+
     except Exception as error:
-
-        print(
-            "GitHub streak error:",
-            error,
-        )
-
+        print("GitHub streak error:", error)
         raise HTTPException(
             status_code=502,
             detail="Unable to fetch GitHub contribution streak",
@@ -1140,78 +972,60 @@ async def github_streak(
 
 @router.get("/daily-contributions")
 async def github_daily_contributions(
-    user_id: int = Depends(
-        get_current_user_id
-    ),
+    user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-
     connection = (
         db.query(GitHubConnection)
-        .filter(
-            GitHubConnection.user_id == user_id
-        )
+        .filter(GitHubConnection.user_id == user_id)
         .first()
     )
 
     if not connection:
-
         raise HTTPException(
             status_code=404,
             detail="GitHub account is not connected",
         )
 
     try:
-
-        contributions = (
-            await get_github_daily_contributions(
-                connection.access_token,
-                connection.github_username,
-            )
+        contributions = await get_github_daily_contributions(
+            connection.access_token,
+            connection.github_username,
         )
-
-        # -------------------------------------------------
-        # If GitHub has contribution activity today,
-        # count today as a developer-active day.
-        #
-        # The actual cross-platform streak will later
-        # combine this with LeetCode, GFG, FCC, NPTEL
-        # and Coursera.
-        # -------------------------------------------------
 
         today = datetime.utcnow().date()
 
-        today_has_contribution = any(
-            day.get("date") == str(today)
-            and int(day.get("count", 0)) > 0
-            for day in contributions.get(
-                "days",
-                [],
-            )
-        )
-
-        if today_has_contribution:
-
-            record_activity(
-                db=db,
-                user_id=user_id,
-                platform="github",
-                activity_type="github_contribution",
-                activity_count=1,
-            )
+        # Idempotently sync verified contribution days into developer_activity
+        for day in contributions.get("days", []):
+            count = int(day.get("count", 0))
+            date_str = day.get("date")
+            if count > 0 and date_str:
+                try:
+                    act_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                    if act_date <= today:
+                        record_unified_activity(
+                            db=db,
+                            user_id=user_id,
+                            platform="github",
+                            category="coding",
+                            activity_type="commit_contribution",
+                            title=f"GitHub Contribution: {count} contribution{'s' if count != 1 else ''}",
+                            message=f"{count} GitHub contribution{'s' if count != 1 else ''} recorded",
+                            details=f"Verified GitHub contributions on {date_str} for @{connection.github_username}",
+                            duration_seconds=0,
+                            activity_date=act_date,
+                            source="github_api",
+                            external_id=f"gh_cal_{date_str}",
+                            activity_count=count,
+                        )
+                except Exception:
+                    pass
 
         return contributions
 
     except Exception as error:
-
-        print(
-            "GitHub daily contributions error:",
-            error,
-        )
-
+        print("GitHub daily contributions error:", error)
         raise HTTPException(
             status_code=502,
-            detail=(
-                "Unable to fetch GitHub daily contributions"
-            ),
+            detail="Unable to fetch GitHub daily contributions",
         )

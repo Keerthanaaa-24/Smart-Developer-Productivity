@@ -1,86 +1,243 @@
-from datetime import datetime
-
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.oauth2 import get_current_user
-
 from app.models.user import User
 from app.models.developer_activity import DeveloperActivity
-
+from app.services.unified_activity_service import (
+    get_unified_activities,
+    get_activity_summary,
+    get_career_summary,
+    create_manual_activity,
+    record_extension_activities,
+)
+from app.services.platform_sync_service import platform_sync_service
 
 router = APIRouter(
-    prefix="/developer-activity",
-    tags=["Developer Activity"],
+    prefix="/activity",
+    tags=["Unified Activity Engine"],
 )
 
 
 # =========================================================
-# START ACTIVITY
+# SCHEMAS
 # =========================================================
 
-@router.post("/start")
-def start_activity(
-    platform: str,
-    activity_type: str = "Practice",
+class ManualActivityRequest(BaseModel):
+    platform: str = "manual"
+    category: str = "coding"
+    activity_type: str = "manual_activity"
+    title: str = Field(..., min_length=2, max_length=200)
+    description: str | None = None
+    duration_minutes: int = Field(default=0, ge=0, le=1440)
+    activity_date: date | None = None
+
+
+class ExtensionActivityItem(BaseModel):
+    platform: str = Field(..., description="Target platform: github, leetcode, coursera, etc.")
+    category: str | None = None
+    activity_type: str = "platform_session"
+    title: str | None = None
+    details: str | None = None
+    started_at: str | None = None
+    ended_at: str | None = None
+    duration_seconds: int = Field(default=0, ge=0, le=86400)
+    source: str = "browser_extension"
+    extension_event_id: str | None = None
+
+
+class ExtensionSyncRequest(BaseModel):
+    events: list[ExtensionActivityItem] = Field(default_factory=list)
+
+
+class CareerApplicationRequest(BaseModel):
+    company: str = Field(..., min_length=1, max_length=150)
+    role: str = Field(..., min_length=1, max_length=150)
+    stage: str = Field(default="applied", description="saved, applied, assessment, interview, offer, rejected, withdrawn")
+    platform: str = Field(default="linkedin", description="linkedin, naukri, company_portal, referral, other")
+    application_date: date | None = None
+    interview_date: str | None = None
+    notes: str | None = None
+
+
+# =========================================================
+# ROUTES
+# =========================================================
+
+@router.get("")
+def list_activities(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    category: str | None = Query(default=None),
+    platform: str | None = Query(default=None),
+    activity_type: str | None = Query(default=None),
+    date_val: date | None = Query(default=None, alias="date"),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    search: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-
-    existing = (
-        db.query(DeveloperActivity)
-        .filter(
-            DeveloperActivity.user_id == current_user.id,
-            DeveloperActivity.ended_at.is_(None),
-        )
-        .first()
-    )
-
-    if existing:
-        raise HTTPException(
-            status_code=400,
-            detail="An activity session is already running.",
-        )
-
-    now = datetime.utcnow()
-
-    activity = DeveloperActivity(
+    return get_unified_activities(
+        db=db,
         user_id=current_user.id,
-        platform=platform.strip().lower(),
-        activity_type=activity_type,
-        activity_date=now.date(),
-        message=f"Started {activity_type} on {platform}",
-        details="Developer activity session",
-        started_at=now,
-        duration_seconds=0,
+        limit=limit,
+        offset=offset,
+        category_filter=category,
+        platform_filter=platform,
+        activity_type_filter=activity_type,
+        date_filter=date_val,
+        start_date=start_date,
+        end_date=end_date,
+        search_query=search,
     )
 
-    db.add(activity)
-    db.commit()
-    db.refresh(activity)
 
-    return {
-        "success": True,
-        "activity_id": activity.id,
-        "platform": activity.platform,
-        "activity_type": activity.activity_type,
-        "started_at": activity.started_at,
-    }
+@router.get("/summary")
+def activity_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return get_activity_summary(db, current_user.id)
 
 
-# =========================================================
-# STOP ACTIVITY
-# =========================================================
+@router.get("/career/summary")
+def career_summary_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return get_career_summary(db, current_user.id)
 
-@router.post("/stop/{activity_id}")
-def stop_activity(
+
+@router.get("/career/applications")
+def list_career_applications(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.unified_activity_service import get_career_applications
+    return get_career_applications(db, current_user.id)
+
+
+@router.post("/career/application")
+def log_career_application(
+    payload: CareerApplicationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.unified_activity_service import create_or_update_career_application
+    return create_or_update_career_application(
+        db=db,
+        user_id=current_user.id,
+        company=payload.company,
+        role=payload.role,
+        stage=payload.stage,
+        platform=payload.platform,
+        application_date=payload.application_date,
+        interview_date=payload.interview_date,
+        notes=payload.notes,
+    )
+
+
+@router.put("/career/application/{activity_id}")
+def update_career_application(
+    activity_id: int,
+    payload: CareerApplicationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.unified_activity_service import create_or_update_career_application
+    return create_or_update_career_application(
+        db=db,
+        user_id=current_user.id,
+        company=payload.company,
+        role=payload.role,
+        stage=payload.stage,
+        platform=payload.platform,
+        application_date=payload.application_date,
+        interview_date=payload.interview_date,
+        notes=payload.notes,
+        activity_id=activity_id,
+    )
+
+
+@router.get("/today")
+def today_activities(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return get_unified_activities(
+        db=db,
+        user_id=current_user.id,
+        limit=50,
+        offset=0,
+        date_filter=date.today(),
+    )
+
+
+@router.get("/sync-status")
+def get_sync_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return platform_sync_service.get_sync_status(db, current_user.id)
+
+
+@router.post("/manual")
+def record_manual(
+    payload: ManualActivityRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return create_manual_activity(
+        db=db,
+        user_id=current_user.id,
+        platform=payload.platform,
+        category=payload.category,
+        activity_type=payload.activity_type,
+        title=payload.title,
+        description=payload.description,
+        duration_minutes=payload.duration_minutes,
+        activity_date=payload.activity_date,
+    )
+
+
+@router.post("/extension-sync")
+def sync_browser_extension(
+    payload: ExtensionSyncRequest | ExtensionActivityItem | list[ExtensionActivityItem],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Normalize payload into list of dictionaries
+    items = []
+    if isinstance(payload, ExtensionSyncRequest):
+        items = [e.dict() for e in payload.events]
+    elif isinstance(payload, list):
+        items = [e.dict() if hasattr(e, "dict") else dict(e) for e in payload]
+    elif isinstance(payload, ExtensionActivityItem):
+        items = [payload.dict()]
+    elif isinstance(payload, dict):
+        if "events" in payload and isinstance(payload["events"], list):
+            items = payload["events"]
+        else:
+            items = [payload]
+
+    return record_extension_activities(
+        db=db,
+        user_id=current_user.id,
+        items=items,
+    )
+
+
+@router.delete("/{activity_id}")
+def delete_activity_record(
     activity_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-
-    activity = (
+    act = (
         db.query(DeveloperActivity)
         .filter(
             DeveloperActivity.id == activity_id,
@@ -88,140 +245,26 @@ def stop_activity(
         )
         .first()
     )
+    if not act:
+        raise HTTPException(status_code=404, detail="Activity record not found")
 
-    if not activity:
-        raise HTTPException(
-            status_code=404,
-            detail="Activity session not found.",
-        )
-
-    if activity.ended_at:
-
-        return {
-            "success": True,
-            "message": "Activity already completed.",
-            "duration_seconds":
-                activity.duration_seconds,
-        }
-
-    activity.ended_at = datetime.utcnow()
-
-    duration = (
-        activity.ended_at -
-        activity.started_at
-    ).total_seconds()
-
-    activity.duration_seconds = max(
-        0,
-        int(duration),
-    )
-
-    activity.message = (
-        f"Completed {activity.activity_type} "
-        f"on {activity.platform}"
-    )
-
-    activity.details = (
-        f"Duration: "
-        f"{activity.duration_seconds // 60} minutes"
-    )
-
+    db.delete(act)
     db.commit()
-    db.refresh(activity)
-
-    return {
-        "success": True,
-        "activity_id": activity.id,
-        "platform": activity.platform,
-        "activity_type": activity.activity_type,
-        "duration_seconds":
-            activity.duration_seconds,
-    }
+    return {"message": "Activity record deleted successfully", "id": activity_id}
 
 
-# =========================================================
-# RECENT ACTIVITIES
-# =========================================================
-
-@router.get("/recent")
-def recent_activities(
+@router.post("/sync")
+async def sync_activities(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    return await platform_sync_service.sync_all(db, current_user.id)
 
-    activities = (
-        db.query(DeveloperActivity)
-        .filter(
-            DeveloperActivity.user_id == current_user.id,
-        )
-        .order_by(
-            DeveloperActivity.created_at.desc()
-        )
-        .limit(20)
-        .all()
-    )
 
-    result = []
-
-    for activity in activities:
-
-        time_ago = "Recently"
-
-        if activity.created_at:
-
-            seconds = (
-                datetime.utcnow() -
-                activity.created_at
-            ).total_seconds()
-
-            if seconds < 60:
-                time_ago = "Just now"
-
-            elif seconds < 3600:
-                minutes = int(
-                    seconds / 60
-                )
-                time_ago = (
-                    f"{minutes} min ago"
-                )
-
-            elif seconds < 86400:
-                hours = int(
-                    seconds / 3600
-                )
-                time_ago = (
-                    f"{hours} hr ago"
-                )
-
-            else:
-                days = int(
-                    seconds / 86400
-                )
-                time_ago = (
-                    f"{days} day ago"
-                    if days == 1
-                    else f"{days} days ago"
-                )
-
-        result.append({
-            "id": activity.id,
-            "platform": activity.platform,
-            "activity_type":
-                activity.activity_type,
-            "message":
-                activity.message,
-            "details":
-                activity.details,
-            "started_at":
-                activity.started_at,
-            "ended_at":
-                activity.ended_at,
-            "duration_seconds":
-                activity.duration_seconds,
-            "time_ago":
-                time_ago,
-        })
-
-    return {
-        "activities": result
-    }
+@router.post("/sync/{platform_name}")
+async def sync_single_platform(
+    platform_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await platform_sync_service.sync_platform(db, current_user.id, platform_name)

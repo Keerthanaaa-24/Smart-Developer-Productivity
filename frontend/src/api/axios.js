@@ -1,23 +1,32 @@
 import axios from "axios";
 
+// =====================================================
+// API CONFIGURATION
+// =====================================================
+
 const API = axios.create({
-  baseURL: "http://127.0.0.1:8000",
+  baseURL:
+    import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_API_URL ||
+    "http://127.0.0.1:8001",
   headers: {
     "Content-Type": "application/json",
   },
 });
 
 // =====================================================
-// ATTACH JWT AUTOMATICALLY TO EVERY REQUEST
+// ATTACH JWT TO EVERY REQUEST
 // =====================================================
 
 API.interceptors.request.use(
   (config) => {
+    // Check both possible token names
     const token =
-      localStorage.getItem("access_token") ||
-      localStorage.getItem("token");
+      localStorage.getItem("token") ||
+      localStorage.getItem("access_token");
 
-    if (token) {
+    if (token && token !== "null" && token !== "undefined") {
+      config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
 
@@ -28,26 +37,23 @@ API.interceptors.request.use(
   }
 );
 
-
 // =====================================================
-// HANDLE AUTHENTICATION ERRORS
+// HANDLE RESPONSE ERRORS
 // =====================================================
 
 API.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
 
   (error) => {
     if (error.response?.status === 401) {
-      console.warn(
-        "Authentication failed. JWT may be missing or expired."
-      );
+      console.warn("401 Unauthorized - JWT missing or invalid.");
+
+      // Do NOT automatically remove the token yet.
+      // We want to debug the authentication flow first.
     }
 
     return Promise.reject(error);
   }
 );
-
 
 export default API;

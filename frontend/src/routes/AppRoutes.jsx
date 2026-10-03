@@ -22,8 +22,9 @@ import GithubIntegration from "../pages/GithubIntegration";
 
 import Settings from "../pages/Settings";
 
+import Activity from "../pages/Activity";
+import Projects from "../pages/Projects";
 import Profile from "../pages/Profile";
-
 import ProtectedRoute from "../components/common/ProtectedRoute";
 
 const AppRoutes = () => {
@@ -54,6 +55,24 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/projects"
+          element={
+            <ProtectedRoute>
+              <Projects />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/activity"
+          element={
+            <ProtectedRoute>
+              <Activity />
             </ProtectedRoute>
           }
         />

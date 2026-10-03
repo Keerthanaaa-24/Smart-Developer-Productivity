@@ -1,0 +1,59 @@
+{
+  "name": "smart-developer-productivity-vscode",
+  "displayName": "Smart Developer Productivity — VS Code Telemetry",
+  "description": "Privacy-first active coding time tracker for Smart Developer Productivity Dashboard",
+  "version": "1.0.0",
+  "publisher": "SmartDevProductivity",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Smart Developer Productivity",
+      "properties": {
+        "smartProductivity.apiBaseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8001",
+          "description": "FastAPI Backend Base URL"
+        },
+        "smartProductivity.apiToken": {
+          "type": "string",
+          "default": "",
+          "description": "JWT Authorization Token from your Dashboard"
+        },
+        "smartProductivity.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable active coding time telemetry"
+        },
+        "smartProductivity.idleThresholdSeconds": {
+          "type": "number",
+          "default": 120,
+          "description": "Number of seconds before marking editor session idle"
+        },
+        "smartProductivity.syncIntervalSeconds": {
+          "type": "number",
+          "default": 60,
+          "description": "Interval in seconds between background sync flushes"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "smartProductivity.syncNow",
+        "title": "Smart Productivity: Sync Coding Telemetry Now"
+      },
+      {
+        "command": "smartProductivity.toggleTracking",
+        "title": "Smart Productivity: Toggle Tracking On/Off"
+      }
+    ]
+  }
+}

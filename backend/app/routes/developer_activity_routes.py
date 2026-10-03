@@ -72,10 +72,6 @@ def record_platform_activity(
     }
 
 
-# =========================================================
-# GET DEVELOPER STREAK
-# =========================================================
-
 @router.get("/streak")
 def developer_streak(
     db: Session = Depends(get_db),
@@ -88,3 +84,16 @@ def developer_streak(
         db=db,
         user_id=current_user.id,
     )
+
+
+# =========================================================
+# GET RECENT DEVELOPER ACTIVITY
+# =========================================================
+
+@router.get("/recent")
+def developer_recent_activity(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.unified_activity_service import get_unified_activities
+    return get_unified_activities(db, current_user.id, limit=15)

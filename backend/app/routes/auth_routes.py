@@ -2,6 +2,8 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Request,
+    status,
 )
 
 from fastapi.security import (
@@ -14,6 +16,10 @@ from app.core.database import get_db
 
 from app.core.oauth2 import (
     get_current_user,
+)
+
+from app.core.security import (
+    verify_password,
 )
 
 from app.models.user import User
@@ -36,6 +42,9 @@ router = APIRouter(
 )
 
 
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+
 # =========================================================
 # REGISTER
 # =========================================================
@@ -45,30 +54,60 @@ def register_user(
     user: UserCreate,
     db: Session = Depends(get_db),
 ):
+    clean_email = str(user.email).strip().lower()
+    clean_username = user.username.strip()
 
-    existing_user = (
+    # 1. Independent Duplicate Email Check
+    existing_email = (
         db.query(User)
         .filter(
-            User.email == user.email
+            func.lower(User.email) == clean_email
         )
         .first()
     )
 
-    if existing_user:
-
+    if existing_email:
         raise HTTPException(
-            status_code=400,
-            detail="Email already registered",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email already exists",
         )
 
-    new_user = create_user(
-        db,
-        user,
+    # 2. Independent Duplicate Username Check
+    existing_username = (
+        db.query(User)
+        .filter(
+            func.lower(User.username) == clean_username.lower()
+        )
+        .first()
     )
 
-    return {
-        "message": "User created successfully",
+    if existing_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This username is already taken. Please choose another username",
+        )
 
+    try:
+        new_user = create_user(
+            db,
+            user,
+        )
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User already exists with this username or email",
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}",
+        )
+
+    return {
+        "success": True,
+        "message": "User registered successfully",
         "user": {
             "id": new_user.id,
             "username": new_user.username,
@@ -78,38 +117,100 @@ def register_user(
 
 
 # =========================================================
-# LOGIN
+# LOGIN (Compatible with Swagger OAuth2 Form & JSON Clients)
 # =========================================================
 
 @router.post("/login")
-def login_user(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+async def login_user(
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    content_type = request.headers.get("content-type", "")
+    username = None
+    password = None
+
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            username = body.get("username") or body.get("email") or body.get("email_or_username")
+            password = body.get("password")
+        except Exception:
+            pass
+    else:
+        try:
+            form = await request.form()
+            username = form.get("username") or form.get("email") or form.get("email_or_username")
+            password = form.get("password")
+        except Exception:
+            pass
+
+    if username is not None:
+        username = str(username).strip()
+
+    if not username or not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username/email and password are required",
+        )
 
     user = authenticate_user(
         db,
-        form_data.username,
-        form_data.password,
+        username,
+        password,
     )
 
     if not user:
-
         raise HTTPException(
-            status_code=401,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Record login history for authentic login streak calculation
+    try:
+        from app.services.login_streak_service import record_user_login
+        client_ip = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent", "")
+        record_user_login(db, user.id, ip_address=client_ip, user_agent=user_agent)
+    except Exception as login_rec_err:
+        print("Login streak recording warning:", login_rec_err)
 
     access_token = create_access_token(
         data={
-            "sub": str(user.id)
+            "sub": str(user.id),
+            "user_id": user.id,
+            "email": user.email,
+            "username": user.username,
         }
     )
 
     return {
         "access_token": access_token,
         "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+        },
     }
+
+
+@router.get("/login-streak")
+def get_user_login_streak(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.login_streak_service import get_login_streak
+    return get_login_streak(db, current_user.id)
+
+
+@router.post("/token")
+async def token_endpoint(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Alias for /auth/login providing standard OAuth2 token endpoint compatibility."""
+    return await login_user(request, db)
 
 
 # =========================================================
