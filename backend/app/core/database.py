@@ -56,9 +56,11 @@ def _build_ssl_context(ca_cert_data: str | None = None, ca_cert_path: str | None
         else:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             backend_dir = os.path.abspath(os.path.join(base_dir, "..", ".."))
+            root_dir = os.path.abspath(os.path.join(backend_dir, ".."))
             for candidate in [
                 os.path.join(base_dir, "ca.pem"),
                 os.path.join(backend_dir, "ca.pem"),
+                os.path.join(root_dir, "ca.pem"),
                 os.path.join(os.getcwd(), "ca.pem"),
             ]:
                 if os.path.isfile(candidate):
