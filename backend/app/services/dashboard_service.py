@@ -339,7 +339,6 @@ def get_dashboard_stats(
             func.coalesce(func.sum(DeveloperActivity.duration_seconds), 0)
         ).filter(
             DeveloperActivity.user_id == user_id,
-            DeveloperActivity.ended_at.is_not(None),
         ).scalar() or 0
     )
 
@@ -348,7 +347,6 @@ def get_dashboard_stats(
     # 20% OF OVERALL
     #
     # 2 hours total activity = 100
-    # This is a simple baseline and can be improved later.
     # =====================================================
 
     consistency_score = min(
@@ -401,41 +399,44 @@ def get_dashboard_stats(
     }
 
     # =====================================================
-    # RECENT ACTIVITY (Limit 10)
+    # RECENT ACTIVITY (Limit 10 - Includes discrete events)
     # =====================================================
 
     recent_activities = db.query(
         DeveloperActivity
     ).filter(
         DeveloperActivity.user_id == user_id,
-        DeveloperActivity.ended_at.is_not(None),
     ).order_by(
-        DeveloperActivity.ended_at.desc()
+        func.coalesce(DeveloperActivity.started_at, DeveloperActivity.created_at).desc()
     ).limit(10).all()
 
     recent_activity = []
 
     for activity in recent_activities:
-
         seconds = activity.duration_seconds or 0
-
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
 
         if hours > 0:
             duration = f"{hours}h {minutes}m"
-        else:
+        elif minutes > 0:
             duration = f"{minutes}m"
+        else:
+            duration = "Completed"
 
         recent_activity.append({
             "id": activity.id,
             "platform": activity.platform,
             "activity_type": activity.activity_type,
+            "title": activity.title or activity.message or f"{activity.activity_type} on {activity.platform}",
+            "message": activity.message,
             "duration_seconds": seconds,
             "duration": duration,
-            "started_at": activity.started_at,
+            "started_at": activity.started_at or activity.created_at,
             "ended_at": activity.ended_at,
+            "activity_date": str(activity.activity_date) if activity.activity_date else None,
         })
+
 
     # =====================================================
     # RETURN

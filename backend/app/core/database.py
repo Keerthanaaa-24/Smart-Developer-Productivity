@@ -7,15 +7,12 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
 
+from app.core.config import settings
+
 logger = logging.getLogger("uvicorn.error")
-load_dotenv()
 
-RAW_DATABASE_URL = os.getenv("DATABASE_URL")
+RAW_DATABASE_URL = settings.DATABASE_URL or os.getenv("DATABASE_URL") or "sqlite:///./smart_developer_productivity.db"
 
-if not RAW_DATABASE_URL:
-    raise RuntimeError(
-        "DATABASE_URL is missing from environment variables."
-    )
 
 
 def _build_ssl_context(ca_cert_data: str | None = None, ca_cert_path: str | None = None) -> ssl.SSLContext:

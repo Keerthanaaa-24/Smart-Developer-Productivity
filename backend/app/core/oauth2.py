@@ -12,20 +12,11 @@ from app.core.database import get_db
 from app.models.user import User
 
 
-# =====================================================
-# LOAD ENVIRONMENT VARIABLES
-# =====================================================
+from app.core.config import settings
 
-load_dotenv()
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
 
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-
-
-if not SECRET_KEY:
-    raise RuntimeError(
-        "SECRET_KEY is missing from the .env file."
-    )
 
 
 # =====================================================

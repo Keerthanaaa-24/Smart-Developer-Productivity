@@ -4,6 +4,7 @@ import API from "../api/axios";
 const GithubIntegration = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [connected, setConnected] = useState(false);
 
   const [profile, setProfile] = useState(null);
   const [repositories, setRepositories] = useState([]);
@@ -40,6 +41,16 @@ const GithubIntegration = () => {
       setLoading(true);
       setError("");
 
+      const statusRes = await API.get("/github/status", authConfig);
+      if (!statusRes.data?.connected) {
+        setConnected(false);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      setConnected(true);
+
       const [
         profileResponse,
         repositoriesResponse,
@@ -48,82 +59,43 @@ const GithubIntegration = () => {
         issuesResponse,
         languagesResponse,
         activityResponse,
-      ] = await Promise.all([
-        API.get(
-          "/github/profile",
-          authConfig
-        ),
-
-        API.get(
-          "/github/repositories",
-          authConfig
-        ),
-
-        API.get(
-          "/github/commits",
-          authConfig
-        ),
-
-        API.get(
-          "/github/pull-requests",
-          authConfig
-        ),
-
-        API.get(
-          "/github/issues",
-          authConfig
-        ),
-
-        API.get(
-          "/github/languages",
-          authConfig
-        ),
-
-        API.get(
-          "/github/activity",
-          authConfig
-        ),
+      ] = await Promise.allSettled([
+        API.get("/github/profile", authConfig),
+        API.get("/github/repositories", authConfig),
+        API.get("/github/commits", authConfig),
+        API.get("/github/pull-requests", authConfig),
+        API.get("/github/issues", authConfig),
+        API.get("/github/languages", authConfig),
+        API.get("/github/activity", authConfig),
       ]);
 
-      setProfile(
-        profileResponse.data
-      );
-
-      setRepositories(
-        repositoriesResponse.data.repositories || []
-      );
-
-      setCommits(
-        commitsResponse.data.commits || []
-      );
-
-      setPullRequests(
-        pullRequestsResponse.data.pull_requests || []
-      );
-
-      setIssues(
-        issuesResponse.data.issues || []
-      );
-
-      setLanguages(
-        languagesResponse.data.languages || []
-      );
-
-      setActivity(
-        activityResponse.data.activity || []
-      );
-
+      if (profileResponse.status === "fulfilled") {
+        setProfile(profileResponse.value.data);
+      }
+      if (repositoriesResponse.status === "fulfilled") {
+        setRepositories(repositoriesResponse.value.data.repositories || []);
+      }
+      if (commitsResponse.status === "fulfilled") {
+        setCommits(commitsResponse.value.data.commits || []);
+      }
+      if (pullRequestsResponse.status === "fulfilled") {
+        setPullRequests(pullRequestsResponse.value.data.pull_requests || []);
+      }
+      if (issuesResponse.status === "fulfilled") {
+        setIssues(issuesResponse.value.data.issues || []);
+      }
+      if (languagesResponse.status === "fulfilled") {
+        setLanguages(languagesResponse.value.data.languages || []);
+      }
+      if (activityResponse.status === "fulfilled") {
+        setActivity(activityResponse.value.data.activity || []);
+      }
     } catch (err) {
-      console.error(
-        "GitHub dashboard error:",
-        err
-      );
-
+      console.error("GitHub dashboard error:", err);
       setError(
         err.response?.data?.detail ||
         "Unable to load GitHub data."
       );
-
     } finally {
       setLoading(false);
     }
@@ -136,19 +108,16 @@ const GithubIntegration = () => {
         authConfig
       );
 
-      window.location.href =
-        response.data.authorization_url;
-
+      if (response.data?.authorization_url) {
+        window.location.href = response.data.authorization_url;
+      }
     } catch (err) {
-      alert(
-        "Unable to start GitHub connection."
-      );
+      alert("Unable to start GitHub connection. Please check your backend configuration.");
     }
   };
 
   const formatDate = (date) => {
     if (!date) return "-";
-
     return new Date(date).toLocaleString();
   };
 
@@ -158,45 +127,59 @@ const GithubIntegration = () => {
     switch (type) {
       case "PushEvent":
         return "Pushed code";
-
       case "PullRequestEvent":
         return "Pull request activity";
-
       case "IssuesEvent":
         return "Issue activity";
-
       case "CreateEvent":
         return "Created something";
-
       case "DeleteEvent":
         return "Deleted something";
-
       case "WatchEvent":
         return "Starred a repository";
-
       case "ForkEvent":
         return "Forked a repository";
-
       case "IssueCommentEvent":
         return "Commented on an issue";
-
       default:
-        return type.replace(
-          "Event",
-          ""
-        );
+        return type.replace("Event", "");
     }
   };
 
   if (loading) {
     return (
       <div className="p-8">
-        <div className="bg-white rounded-2xl shadow p-8 text-center">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow p-8 text-center border border-slate-200 dark:border-slate-800">
           <div className="animate-spin h-10 w-10 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4" />
-
-          <p className="text-gray-600">
-            Loading GitHub data...
+          <p className="text-slate-600 dark:text-slate-300">
+            Loading GitHub telemetry...
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!connected) {
+    return (
+      <div className="p-8 max-w-4xl mx-auto">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl p-10 text-center border border-slate-200 dark:border-slate-800">
+          <div className="w-20 h-20 bg-slate-900 text-white rounded-3xl flex items-center justify-center text-4xl mx-auto mb-6 shadow-lg">
+            🐙
+          </div>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-3">
+            Connect Your GitHub Account
+          </h2>
+          <p className="text-slate-500 dark:text-slate-400 max-w-lg mx-auto mb-8 text-sm leading-relaxed">
+            Link your authentic GitHub account via secure OAuth to automatically track commits, pull requests, repositories, language distributions, and contribution streaks.
+          </p>
+
+          <button
+            onClick={connectGithub}
+            className="bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white font-bold px-8 py-4 rounded-2xl transition shadow-lg hover:shadow-xl inline-flex items-center gap-3 cursor-pointer"
+          >
+            <span>Connect with GitHub OAuth</span>
+            <span>→</span>
+          </button>
         </div>
       </div>
     );
@@ -204,26 +187,25 @@ const GithubIntegration = () => {
 
   if (error) {
     return (
-      <div className="p-8">
-        <div className="bg-white rounded-2xl shadow p-8 text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">
-            GitHub
+      <div className="p-8 max-w-4xl mx-auto">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl p-8 text-center border border-rose-200 dark:border-rose-900/50">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-3">
+            GitHub Telemetry Notice
           </h2>
-
-          <p className="text-red-600 mb-6">
+          <p className="text-rose-600 dark:text-rose-400 mb-6 text-sm">
             {error}
           </p>
-
           <button
-            onClick={connectGithub}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
+            onClick={loadGithubData}
+            className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 font-semibold transition"
           >
-            Connect GitHub
+            Retry Connection
           </button>
         </div>
       </div>
     );
   }
+
 
   return (
     <div className="p-6 space-y-6">

@@ -46,14 +46,25 @@ API.interceptors.response.use(
 
   (error) => {
     if (error.response?.status === 401) {
-      console.warn("401 Unauthorized - JWT missing or invalid.");
-
-      // Do NOT automatically remove the token yet.
-      // We want to debug the authentication flow first.
+      const url = error.config?.url || "";
+      const isAuthRequest = url.includes("/auth/login") || url.includes("/auth/register");
+      
+      if (!isAuthRequest) {
+        console.warn("401 Unauthorized on protected route - session expired.");
+        localStorage.removeItem("token");
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("user");
+        localStorage.removeItem("profile");
+        // Dispatch session expired event if in browser
+        if (typeof window !== "undefined" && window.location.pathname !== "/login" && window.location.pathname !== "/register" && window.location.pathname !== "/") {
+          window.location.href = "/login?expired=1";
+        }
+      }
     }
 
     return Promise.reject(error);
   }
 );
+
 
 export default API;

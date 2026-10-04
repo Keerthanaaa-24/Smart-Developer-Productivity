@@ -195,6 +195,29 @@ async def login_user(
     }
 
 
+# =========================================================
+# CURRENT USER (SESSION VALIDATION & PERSISTENCE)
+# =========================================================
+
+@router.get("/me")
+def get_current_authenticated_user(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.models.user_settings import UserSettings
+    settings = db.query(UserSettings).filter(UserSettings.user_id == current_user.id).first()
+
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "full_name": (settings.full_name if settings and settings.full_name else current_user.username) or current_user.username,
+        "avatar_url": settings.avatar_url if settings and settings.avatar_url else None,
+        "theme": settings.theme if settings and settings.theme else "light",
+    }
+
+
+
 @router.get("/login-streak")
 def get_user_login_streak(
     db: Session = Depends(get_db),

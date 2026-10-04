@@ -9,6 +9,7 @@ from app.core.database import Base, engine
 
 from app.models.user import User
 from app.models.task import Task
+from app.models.notification import Notification
 
 from app.models.github_connection import GitHubConnection
 from app.models.leetcode_connection import LeetCodeConnection
@@ -53,6 +54,57 @@ from app.routes.pomodoro_routes import router as pomodoro_router
 from app.routes.settings_routes import router as settings_router
 from app.routes.project_routes import router as project_router
 from app.routes.organization_routes import router as organization_router
+from app.routes.notification_routes import router as notification_router
+
+
+# =====================================================
+# BACKGROUND SCHEDULER (LIFESPAN)
+# =====================================================
+
+import asyncio
+from contextlib import asynccontextmanager
+from app.core.database import SessionLocal
+from app.services.notification_service import notification_service
+
+
+async def _periodic_notification_worker():
+    """Background worker that periodically updates dynamic notifications every 15 minutes."""
+    while True:
+        try:
+            await asyncio.sleep(900)  # 15 minutes
+            db = SessionLocal()
+            try:
+                users = db.query(User.id).all()
+                for (u_id,) in users:
+                    try:
+                        notification_service.generate_dynamic_notifications(db, u_id)
+                    except Exception:
+                        pass
+            finally:
+                db.close()
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            await asyncio.sleep(60)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Schema check
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        import logging
+        logging.getLogger("uvicorn.error").warning(f"Schema verify warning: {e}")
+
+    # Start background notification task
+    task = asyncio.create_task(_periodic_notification_worker())
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 
 # =====================================================
@@ -62,7 +114,9 @@ from app.routes.organization_routes import router as organization_router
 app = FastAPI(
     title="Smart Developer Productivity Dashboard",
     version="1.0.0",
+    lifespan=lifespan,
 )
+
 
 
 # =====================================================
@@ -180,6 +234,11 @@ app.include_router(
 app.include_router(
     organization_router
 )
+
+app.include_router(
+    notification_router
+)
+
 
 # =====================================================
 # HEALTH CHECKS

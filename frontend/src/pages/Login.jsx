@@ -41,16 +41,14 @@ const Login = () => {
       if (data?.access_token) {
         localStorage.setItem("token", data.access_token);
         localStorage.setItem("access_token", data.access_token);
-        localStorage.setItem(
-          "user",
-          JSON.stringify({
-            username: formData.username,
-            email: formData.username,
-          })
-        );
+        const userData = data.user || {
+          username: formData.username,
+          email: formData.username,
+        };
+        localStorage.setItem("user", JSON.stringify(userData));
 
         if (auth && auth.login) {
-          auth.login(data.access_token);
+          auth.login(data.access_token, userData);
         }
 
         navigate("/dashboard");

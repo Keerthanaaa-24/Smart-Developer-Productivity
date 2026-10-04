@@ -23,4 +23,16 @@ export const registerUser = async (userData) => {
 
   const response = await API.post("/auth/register", payload);
   return response.data;
-};
+};
+
+export const getCurrentUser = async () => {
+  const response = await API.get("/auth/me");
+  return response.data;
+};
+
+export const changePassword = async (currentPassword, newPassword) => {
+  const response = await API.post(
+    `/auth/change-password?current_password=${encodeURIComponent(currentPassword)}&new_password=${encodeURIComponent(newPassword)}`
+  );
+  return response.data;
+};

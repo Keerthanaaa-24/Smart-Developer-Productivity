@@ -17,6 +17,7 @@ from app.models.task import Task
 from app.models.project import Project
 from app.models.user_settings import UserSettings
 from app.models.login_history import LoginHistory
+from app.models.notification import Notification
 
 __all__ = [
     "User",
@@ -36,4 +37,6 @@ __all__ = [
     "Project",
     "UserSettings",
     "LoginHistory",
+    "Notification",
 ]
+

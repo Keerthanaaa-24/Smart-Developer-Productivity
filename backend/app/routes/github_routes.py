@@ -6,11 +6,13 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Request,
 )
 from fastapi.responses import RedirectResponse
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.oauth2 import get_current_user
 from app.core.encryption import encrypt_token, decrypt_token
@@ -45,22 +47,60 @@ router = APIRouter(
 
 
 # =========================================================
-# CONFIGURATION
+# CONFIGURATION & DYNAMIC RESOLUTION HELPERS
 # =========================================================
 
-GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
-GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
-GITHUB_REDIRECT_URI = os.getenv(
-    "GITHUB_REDIRECT_URI",
-    "http://127.0.0.1:8001/github/callback",
-)
-SECRET_KEY = os.getenv("SECRET_KEY", "mysecretkey")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+GITHUB_CLIENT_ID = settings.GITHUB_CLIENT_ID or os.getenv("GITHUB_CLIENT_ID")
+GITHUB_CLIENT_SECRET = settings.GITHUB_CLIENT_SECRET or os.getenv("GITHUB_CLIENT_SECRET")
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+DEFAULT_FRONTEND_URL = settings.FRONTEND_URL
 
 GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_USER_URL = "https://api.github.com/user"
+
+
+def _resolve_redirect_uri(request: Request) -> str:
+    """
+    Resolves the exact OAuth redirect URI dynamically:
+    1. If GITHUB_REDIRECT_URI is explicitly configured and not defaulting to localhost on remote servers, use it.
+    2. Otherwise dynamically derive from the incoming request's host/scheme.
+    """
+    configured_uri = settings.GITHUB_REDIRECT_URI or os.getenv("GITHUB_REDIRECT_URI")
+    
+    # Check if request is on a remote host (e.g., on Render or production proxy)
+    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    forwarded_proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    is_remote_host = forwarded_host and not any(h in forwarded_host for h in ("localhost", "127.0.0.1", "0.0.0.0"))
+
+    if configured_uri:
+        # If configured for production or matching host, return it
+        if not ("127.0.0.1" in configured_uri or "localhost" in configured_uri) or not is_remote_host:
+            return configured_uri
+
+    if is_remote_host:
+        return f"{forwarded_proto}://{forwarded_host}/github/callback"
+
+    return configured_uri or "http://127.0.0.1:8001/github/callback"
+
+
+def _resolve_frontend_url(request: Request, state_frontend: str | None = None) -> str:
+    """
+    Resolves the target frontend application URL (Vercel / Localhost) for post-OAuth redirect.
+    """
+    if state_frontend and state_frontend.startswith("http"):
+        return state_frontend.rstrip("/")
+
+    origin = request.headers.get("origin") or request.headers.get("referer")
+    if origin and origin.startswith("http"):
+        # Strip trailing path if referer
+        parts = origin.split("://", 1)
+        if len(parts) == 2:
+            domain_part = parts[1].split("/")[0]
+            return f"{parts[0]}://{domain_part}"
+
+    return DEFAULT_FRONTEND_URL.rstrip("/")
 
 
 # =========================================================
@@ -74,29 +114,38 @@ def get_current_user_id(
 
 
 # =========================================================
-# LOGIN
+# LOGIN (OAuth Initiation)
 # =========================================================
 
 @router.get("/login")
 def github_login(
+    request: Request,
     user_id: int = Depends(get_current_user_id),
 ):
-    if not GITHUB_CLIENT_ID:
+    client_id = settings.GITHUB_CLIENT_ID or os.getenv("GITHUB_CLIENT_ID")
+    client_secret = settings.GITHUB_CLIENT_SECRET or os.getenv("GITHUB_CLIENT_SECRET")
+
+    if not client_id:
         raise HTTPException(
             status_code=500,
-            detail="GITHUB_CLIENT_ID is not configured",
+            detail="GITHUB_CLIENT_ID is not configured in backend environment variables.",
         )
 
-    if not GITHUB_CLIENT_SECRET:
+    if not client_secret:
         raise HTTPException(
             status_code=500,
-            detail="GITHUB_CLIENT_SECRET is not configured",
+            detail="GITHUB_CLIENT_SECRET is not configured in backend environment variables.",
         )
+
+    resolved_redirect_uri = _resolve_redirect_uri(request)
+    frontend_url = _resolve_frontend_url(request)
 
     state_payload = {
         "user_id": user_id,
         "purpose": "github_oauth",
-        "exp": datetime.utcnow() + timedelta(minutes=10),
+        "redirect_uri": resolved_redirect_uri,
+        "frontend_url": frontend_url,
+        "exp": datetime.utcnow() + timedelta(minutes=15),
     }
 
     state = jwt.encode(
@@ -106,8 +155,8 @@ def github_login(
     )
 
     params = {
-        "client_id": GITHUB_CLIENT_ID,
-        "redirect_uri": GITHUB_REDIRECT_URI,
+        "client_id": client_id,
+        "redirect_uri": resolved_redirect_uri,
         "scope": "read:user user:email repo",
         "state": state,
         "allow_signup": "false",
@@ -115,7 +164,11 @@ def github_login(
 
     authorization_url = f"{GITHUB_AUTHORIZE_URL}?{urlencode(params)}"
 
-    return {"authorization_url": authorization_url}
+    return {
+        "authorization_url": authorization_url,
+        "redirect_uri": resolved_redirect_uri,
+        "frontend_url": frontend_url,
+    }
 
 
 # =========================================================
@@ -124,28 +177,32 @@ def github_login(
 
 @router.get("/callback")
 async def github_callback(
+    request: Request,
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
     error_description: str | None = None,
     db: Session = Depends(get_db),
 ):
+    target_frontend = _resolve_frontend_url(request)
+    callback_redirect_uri = _resolve_redirect_uri(request)
+
     if error:
         message = quote_plus(error_description or error or "GitHub authorization was denied or cancelled")
         return RedirectResponse(
-            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={message}"
+            url=f"{target_frontend}/settings?tab=connected&github=error&message={message}"
         )
 
     if not code:
         err_msg = quote_plus("GitHub authorization code is missing")
         return RedirectResponse(
-            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
+            url=f"{target_frontend}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     if not state:
         err_msg = quote_plus("GitHub OAuth state parameter is missing")
         return RedirectResponse(
-            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
+            url=f"{target_frontend}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     try:
@@ -157,17 +214,24 @@ async def github_callback(
 
         user_id = state_data.get("user_id")
         purpose = state_data.get("purpose")
+        state_frontend = state_data.get("frontend_url")
+        state_redirect_uri = state_data.get("redirect_uri")
+
+        if state_frontend:
+            target_frontend = state_frontend.rstrip("/")
+        if state_redirect_uri:
+            callback_redirect_uri = state_redirect_uri
 
         if not user_id or purpose != "github_oauth":
             err_msg = quote_plus("Invalid GitHub OAuth state payload")
             return RedirectResponse(
-                url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
+                url=f"{target_frontend}/settings?tab=connected&github=error&message={err_msg}"
             )
 
     except JWTError:
         err_msg = quote_plus("Invalid or expired GitHub OAuth state token")
         return RedirectResponse(
-            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
+            url=f"{target_frontend}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     application_user = (
@@ -179,21 +243,24 @@ async def github_callback(
     if not application_user:
         err_msg = quote_plus("Associated application user account not found")
         return RedirectResponse(
-            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
+            url=f"{target_frontend}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     # -----------------------------------------------------
     # Exchange authorization code
     # -----------------------------------------------------
 
+    client_id = settings.GITHUB_CLIENT_ID or os.getenv("GITHUB_CLIENT_ID")
+    client_secret = settings.GITHUB_CLIENT_SECRET or os.getenv("GITHUB_CLIENT_SECRET")
+
     async with httpx.AsyncClient(timeout=20.0) as client:
         token_response = await client.post(
             GITHUB_TOKEN_URL,
             data={
-                "client_id": GITHUB_CLIENT_ID,
-                "client_secret": GITHUB_CLIENT_SECRET,
+                "client_id": client_id,
+                "client_secret": client_secret,
                 "code": code,
-                "redirect_uri": GITHUB_REDIRECT_URI,
+                "redirect_uri": callback_redirect_uri,
             },
             headers={"Accept": "application/json"},
         )
@@ -201,7 +268,7 @@ async def github_callback(
     if token_response.status_code != 200:
         err_msg = quote_plus("Failed to exchange GitHub authorization code")
         return RedirectResponse(
-            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
+            url=f"{target_frontend}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     token_data = token_response.json()
@@ -210,8 +277,9 @@ async def github_callback(
     if not access_token:
         err_msg = quote_plus(token_data.get("error_description") or "GitHub did not return an access token")
         return RedirectResponse(
-            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
+            url=f"{target_frontend}/settings?tab=connected&github=error&message={err_msg}"
         )
+
 
     # -----------------------------------------------------
     # Get GitHub user identity
@@ -230,7 +298,7 @@ async def github_callback(
     if github_response.status_code != 200:
         err_msg = quote_plus("Unable to retrieve profile from GitHub API")
         return RedirectResponse(
-            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
+            url=f"{target_frontend}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     github_user = github_response.json()
@@ -240,7 +308,7 @@ async def github_callback(
     if not github_id or not github_username:
         err_msg = quote_plus("Invalid GitHub account profile information received")
         return RedirectResponse(
-            url=f"{FRONTEND_URL}/settings?tab=connected&github=error&message={err_msg}"
+            url=f"{target_frontend}/settings?tab=connected&github=error&message={err_msg}"
         )
 
     # Encrypt access token at rest
@@ -320,7 +388,7 @@ async def github_callback(
 
     status_param = "relinked" if is_relinked else "connected"
     return RedirectResponse(
-        url=f"{FRONTEND_URL}/settings?tab=connected&github={status_param}&username={quote_plus(github_username)}"
+        url=f"{target_frontend}/settings?tab=connected&github={status_param}&username={quote_plus(github_username)}"
     )
 
 

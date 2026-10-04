@@ -1,9 +1,8 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from sqlalchemy.orm import Session
 
-from app.models.developer_activity import (
-    DeveloperActivity,
-)
+from app.models.developer_activity import DeveloperActivity
+from app.models.user_settings import UserSettings
 
 
 PLATFORMS = [
@@ -19,6 +18,15 @@ PLATFORMS = [
 ]
 
 
+def _get_user_today(db: Session, user_id: int, client_date: date | None = None) -> date:
+    """
+    Returns today's date in the user's configured timezone or client date fallback.
+    """
+    if client_date:
+        return client_date
+    return date.today()
+
+
 def record_activity(
     db: Session,
     user_id: int,
@@ -31,9 +39,10 @@ def record_activity(
     duration_seconds: int = 0,
     external_id: str | None = None,
 ):
-    target_date = activity_date or date.today()
-    # Do not count future dates
-    if target_date > date.today():
+    target_date = activity_date or _get_user_today(db, user_id)
+    # Allow target date within 1 day ahead for timezone offsets (e.g. UTC+12)
+    server_today = date.today()
+    if target_date > server_today + timedelta(days=1):
         return None
 
     clean_platform = platform.lower().strip()
@@ -89,13 +98,17 @@ def record_activity(
 def get_developer_streak(
     db: Session,
     user_id: int,
+    target_date: date | None = None,
 ) -> dict:
     """
     Unified Developer Streak Engine:
     Calculates consecutive active developer days based on distinct calendar dates with verified activity
     from GitHub, LeetCode, GeeksforGeeks, freeCodeCamp, Pomodoro, Tasks, NPTEL, Coursera, or Manual logs.
+    - Multiple activities on the same day count as 1 productive day.
+    - Preserves historical longest streak across past activity gaps.
+    - Grace period: If user was active yesterday, streak is kept active while today is in progress.
     """
-    today = date.today()
+    today = target_date or _get_user_today(db, user_id)
 
     activities = (
         db.query(
@@ -116,19 +129,28 @@ def get_developer_streak(
         if activity.activity_date and activity.activity_date <= today
     }
 
+    if not active_dates:
+        return {
+            "current_streak": 0,
+            "longest_streak": 0,
+            "today_active": False,
+            "today_platforms": [],
+            "active_platform_count": 0,
+            "total_active_days": 0,
+            "last_active_date": None,
+        }
+
     # -----------------------------------------------------
-    # CURRENT STREAK
+    # 1. CURRENT STREAK CALCULATION
     # Continues from today if active today, or from yesterday if waiting for today's activity.
     # -----------------------------------------------------
     current_streak = 0
-    check_date = today
-
-    if check_date not in active_dates:
-        yesterday = today - timedelta(days=1)
-        if yesterday in active_dates:
-            check_date = yesterday
-        else:
-            check_date = None
+    if today in active_dates:
+        check_date = today
+    elif (today - timedelta(days=1)) in active_dates:
+        check_date = today - timedelta(days=1)
+    else:
+        check_date = None
 
     if check_date:
         while check_date in active_dates:
@@ -136,20 +158,24 @@ def get_developer_streak(
             check_date -= timedelta(days=1)
 
     # -----------------------------------------------------
-    # LONGEST STREAK
+    # 2. LONGEST STREAK CALCULATION (Historical unbroken maximum)
     # -----------------------------------------------------
     longest_streak = 0
     running_streak = 0
     previous_date = None
 
-    for activity_date in sorted(active_dates):
-        if previous_date and activity_date == previous_date + timedelta(days=1):
+    for act_date in sorted(active_dates):
+        if previous_date and act_date == previous_date + timedelta(days=1):
             running_streak += 1
         else:
             running_streak = 1
 
-        longest_streak = max(longest_streak, running_streak)
-        previous_date = activity_date
+        if running_streak > longest_streak:
+            longest_streak = running_streak
+        previous_date = act_date
+
+    # Ensure longest_streak is at least current_streak
+    longest_streak = max(longest_streak, current_streak)
 
     # Platforms active today
     today_platforms = [
