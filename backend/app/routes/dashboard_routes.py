@@ -28,12 +28,14 @@ router = APIRouter(
 
 @router.get("/overview")
 def dashboard_overview(
+    refresh: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     return get_dashboard_overview(
         db=db,
-        user_id=current_user.id
+        user_id=current_user.id,
+        force_refresh=refresh,
     )
 
 
@@ -43,13 +45,15 @@ def dashboard_overview(
 
 @router.get("/stats")
 def dashboard_stats(
+    refresh: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
 
     stats = get_dashboard_stats(
         db,
-        current_user.id
+        current_user.id,
+        force_refresh=refresh,
     )
 
     return stats

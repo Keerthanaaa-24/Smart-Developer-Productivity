@@ -4,8 +4,21 @@ import { getCurrentUser } from "../api/authApi";
 export const AuthContext = createContext();
 
 const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => {
+    try {
+      const token =
+        localStorage.getItem("token") || localStorage.getItem("access_token");
+      const cached = localStorage.getItem("user");
+      if (token && cached) {
+        return { ...JSON.parse(cached), token };
+      }
+    } catch {
+      // ignore JSON parse error
+    }
+    return null;
+  });
+
+  const [loading, setLoading] = useState(false);
 
   const initAuth = useCallback(async () => {
     const token =
@@ -18,19 +31,7 @@ const AuthProvider = ({ children }) => {
     }
 
     try {
-      // Try local stored user cache first for instant UI response
-      const cachedUser = localStorage.getItem("user");
-      if (cachedUser) {
-        try {
-          setUser({ ...JSON.parse(cachedUser), token });
-        } catch {
-          setUser({ token });
-        }
-      } else {
-        setUser({ token });
-      }
-
-      // Verify token authenticity with backend
+      // Verify token authenticity in the background without blocking the UI
       const userData = await getCurrentUser();
       if (userData && userData.id) {
         const fullUser = { ...userData, token };

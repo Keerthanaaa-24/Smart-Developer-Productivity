@@ -1,8 +1,4 @@
-from sqlalchemy import Column
-from sqlalchemy import Integer
-from sqlalchemy import String
-from sqlalchemy import ForeignKey
-from sqlalchemy import Date
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, Index
 
 from app.core.database import Base
 
@@ -10,6 +6,11 @@ from app.core.database import Base
 class Task(Base):
 
     __tablename__ = "tasks"
+
+    __table_args__ = (
+        Index("ix_tasks_user_status", "user_id", "status"),
+        Index("ix_tasks_user_due_date", "user_id", "due_date"),
+    )
 
     id = Column(
         Integer,
@@ -21,14 +22,14 @@ class Task(Base):
 
     description = Column(String(500))
 
-    status = Column(String(50))
+    status = Column(String(50), index=True)
 
     priority = Column(String(50))
 
-    due_date = Column(Date)
+    due_date = Column(Date, index=True)
 
     user_id = Column(
         Integer,
-        ForeignKey("users.id"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         index=True,
     )

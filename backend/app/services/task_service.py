@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from app.core.cache import user_cache
 from app.models.task import Task
 
 from app.schemas.task_schema import TaskCreate
@@ -25,6 +26,7 @@ def create_task(
     db.commit()
 
     db.refresh(db_task)
+    user_cache.invalidate_user(user_id)
 
     return db_task
 
@@ -94,6 +96,7 @@ def update_task(
         except Exception as e:
             print("Task completion activity log error:", e)
 
+    user_cache.invalidate_user(user_id)
     return db_task
 
 
@@ -115,5 +118,6 @@ def delete_task(
     db.delete(db_task)
 
     db.commit()
+    user_cache.invalidate_user(user_id)
 
     return db_task

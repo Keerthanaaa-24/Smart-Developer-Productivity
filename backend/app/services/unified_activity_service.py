@@ -3,6 +3,7 @@ from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
+from app.core.cache import user_cache
 from app.models.user import User
 from app.models.developer_activity import DeveloperActivity
 from app.models.user_settings import UserSettings
@@ -120,6 +121,7 @@ def record_unified_activity(
                 existing.ended_at = ended_at
             db.commit()
             db.refresh(existing)
+            user_cache.invalidate_user(user_id)
             return existing
 
     # 3. Create new discrete activity record
@@ -143,6 +145,7 @@ def record_unified_activity(
     db.add(activity)
     db.commit()
     db.refresh(activity)
+    user_cache.invalidate_user(user_id)
     return activity
 
 
@@ -334,7 +337,12 @@ def get_unified_activities(
 # ACTIVITY SUMMARY & TIME BREAKDOWN
 # =========================================================
 
-def get_activity_summary(db: Session, user_id: int) -> dict:
+def get_activity_summary(db: Session, user_id: int, force_refresh: bool = False) -> dict:
+    if not force_refresh:
+        cached = user_cache.get(user_id, "activity_summary")
+        if cached is not None:
+            return cached
+
     today = date.today()
     start_week = today - timedelta(days=6)
 
@@ -542,7 +550,7 @@ def get_activity_summary(db: Session, user_id: int) -> dict:
         },
     ]
 
-    return {
+    summary_res = {
         "today": {
             "coding": {"seconds": today_cat_seconds["coding"], "formatted": fmt_dur(today_cat_seconds["coding"]), "count": today_cat_counts["coding"]},
             "learning": {"seconds": learning_today_secs, "formatted": fmt_dur(learning_today_secs), "count": learning_today_count},
@@ -568,6 +576,9 @@ def get_activity_summary(db: Session, user_id: int) -> dict:
         },
         "platforms": platforms_status,
     }
+
+    user_cache.set(user_id, "activity_summary", summary_res, ttl=20)
+    return summary_res
 
 
 # =========================================================

@@ -2,6 +2,7 @@ from datetime import date, timedelta
 from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 
+from app.core.cache import user_cache
 from app.models.user import User
 from app.models.task import Task
 
@@ -27,7 +28,12 @@ def clamp_score(value):
 def get_dashboard_stats(
     db: Session,
     user_id: int,
+    force_refresh: bool = False,
 ):
+    if not force_refresh:
+        cached = user_cache.get(user_id, "stats")
+        if cached is not None:
+            return cached
     # =====================================================
     # TASKS (Single aggregation query)
     # =====================================================
@@ -442,7 +448,7 @@ def get_dashboard_stats(
     # RETURN
     # =====================================================
 
-    return {
+    stats_res = {
         "total_tasks": total_tasks,
         "completed_tasks": completed_tasks,
         "pending_tasks": pending_tasks,
@@ -477,6 +483,9 @@ def get_dashboard_stats(
         "recent_activity":
             recent_activity,
     }
+
+    user_cache.set(user_id, "stats", stats_res, ttl=30)
+    return stats_res
 
 
 # =========================================================
@@ -651,7 +660,12 @@ def generate_ai_insights(
     ]
 
 
-def get_dashboard_overview(db: Session, user_id: int) -> dict:
+def get_dashboard_overview(db: Session, user_id: int, force_refresh: bool = False) -> dict:
+    if not force_refresh:
+        cached = user_cache.get(user_id, "overview")
+        if cached is not None:
+            return cached
+
     from app.models.user_settings import UserSettings
     from app.models.pomodoro_session import PomodoroSession
     from app.services.login_streak_service import get_login_streak
@@ -907,7 +921,7 @@ def get_dashboard_overview(db: Session, user_id: int) -> dict:
         career_summary=career_summary,
     )
 
-    return {
+    overview_res = {
         "user": {
             "id": user_id,
             "username": user_name,
@@ -929,4 +943,7 @@ def get_dashboard_overview(db: Session, user_id: int) -> dict:
         "weekly_productivity": weekly_productivity,
         "timeline": timeline,
         "ai_insights": ai_insights,
-    }
+    }
+
+    user_cache.set(user_id, "overview", overview_res, ttl=20)
+    return overview_res

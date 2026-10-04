@@ -9,13 +9,26 @@ const API = axios.create({
     import.meta.env.VITE_API_BASE_URL ||
     import.meta.env.VITE_API_URL ||
     "http://127.0.0.1:8001",
+  timeout: 25000, // 25s timeout prevents infinite hanging during cold starts or network latency
   headers: {
     "Content-Type": "application/json",
   },
 });
 
+// Map to track and deduplicate identical in-flight GET requests
+const inFlightRequests = new Map();
+
+// Helper to build unique key for in-flight GET requests
+const getRequestKey = (config) => {
+  const method = (config.method || "get").toLowerCase();
+  if (method !== "get") return null;
+  const url = config.url || "";
+  const params = config.params ? JSON.stringify(config.params) : "";
+  return `${url}?${params}`;
+};
+
 // =====================================================
-// ATTACH JWT TO EVERY REQUEST
+// ATTACH JWT & IN-FLIGHT DEDUPLICATION
 // =====================================================
 
 API.interceptors.request.use(
@@ -30,6 +43,17 @@ API.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    // Deduplicate in-flight GET requests if requested
+    const key = getRequestKey(config);
+    if (key && inFlightRequests.has(key)) {
+      config.cancelToken = new axios.CancelToken((cancel) => {
+        inFlightRequests.get(key).then(
+          (res) => cancel({ __isDeduplicated: true, data: res }),
+          (err) => cancel({ __isDeduplicated: true, error: err })
+        );
+      });
+    }
+
     return config;
   },
   (error) => {
@@ -38,13 +62,33 @@ API.interceptors.request.use(
 );
 
 // =====================================================
-// HANDLE RESPONSE ERRORS
+// HANDLE RESPONSE ERRORS & CLEANUP
 // =====================================================
 
 API.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const key = getRequestKey(response.config);
+    if (key) {
+      inFlightRequests.delete(key);
+    }
+    return response;
+  },
 
   (error) => {
+    if (axios.isCancel(error) && error.message?.__isDeduplicated) {
+      if (error.message.error) {
+        return Promise.reject(error.message.error);
+      }
+      return Promise.resolve(error.message.data);
+    }
+
+    if (error.config) {
+      const key = getRequestKey(error.config);
+      if (key) {
+        inFlightRequests.delete(key);
+      }
+    }
+
     if (error.response?.status === 401) {
       const url = error.config?.url || "";
       const isAuthRequest = url.includes("/auth/login") || url.includes("/auth/register");

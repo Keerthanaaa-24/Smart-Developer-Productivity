@@ -2,6 +2,7 @@ from datetime import datetime, date, timedelta
 from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 
+from app.core.cache import user_cache
 from app.models.pomodoro_session import PomodoroSession
 from app.models.developer_activity import DeveloperActivity
 from app.models.task import Task
@@ -104,6 +105,7 @@ def start_pomodoro_session(
     db.add(new_session)
     db.commit()
     db.refresh(new_session)
+    user_cache.invalidate_user(user_id)
 
     return {
         "id": new_session.id,
@@ -141,6 +143,7 @@ def pause_pomodoro_session(
     session.actual_duration_seconds = max(session.actual_duration_seconds, elapsed_seconds)
     db.commit()
     db.refresh(session)
+    user_cache.invalidate_user(user_id)
 
     return {
         "id": session.id,
@@ -169,6 +172,7 @@ def resume_pomodoro_session(
     session.status = "running"
     db.commit()
     db.refresh(session)
+    user_cache.invalidate_user(user_id)
 
     return {
         "id": session.id,
@@ -216,6 +220,7 @@ def complete_pomodoro_session(
 
     db.commit()
     db.refresh(session)
+    user_cache.invalidate_user(user_id)
 
     return {
         "id": session.id,
@@ -267,6 +272,7 @@ def cancel_pomodoro_session(
 
     db.commit()
     db.refresh(session)
+    user_cache.invalidate_user(user_id)
 
     return {
         "id": session.id,

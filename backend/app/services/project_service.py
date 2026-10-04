@@ -36,21 +36,33 @@ def get_user_projects(db: Session, user_id: int, include_archived: bool = False)
         query = query.filter(Project.status != "Archived")
     
     projects = query.order_by(desc(Project.updated_at)).all()
-    results = []
+    if not projects:
+        return []
     
+    # 1. Batch load user tasks and activities in single indexed queries to eliminate N+1 roundtrips
+    user_tasks = db.query(Task.description, Task.status).filter(Task.user_id == user_id).all()
+    user_activities = db.query(
+        DeveloperActivity.title,
+        DeveloperActivity.details,
+        DeveloperActivity.duration_seconds
+    ).filter(DeveloperActivity.user_id == user_id).all()
+    
+    results = []
     for p in projects:
-        # Calculate task count and completion
-        tasks = db.query(Task).filter(Task.user_id == user_id, Task.description.ilike(f"%{p.name}%")).all()
-        total_tasks = len(tasks)
-        completed_tasks = len([t for t in tasks if t.status == "Completed"])
+        p_name_lower = p.name.lower().strip()
+        
+        # In-memory task matching
+        matching_tasks = [t for t in user_tasks if t.description and p_name_lower in t.description.lower()]
+        total_tasks = len(matching_tasks)
+        completed_tasks = len([t for t in matching_tasks if t.status == "Completed"])
         progress = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
         
-        # Calculate project coding duration from developer_activity if any
-        act_secs = db.query(DeveloperActivity).filter(
-            DeveloperActivity.user_id == user_id,
-            (DeveloperActivity.title.ilike(f"%{p.name}%") | DeveloperActivity.details.ilike(f"%{p.name}%"))
-        ).all()
-        total_coding_seconds = sum(a.duration_seconds or 0 for a in act_secs)
+        # In-memory activity coding duration matching
+        matching_acts = [
+            a for a in user_activities
+            if (a.title and p_name_lower in a.title.lower()) or (a.details and p_name_lower in a.details.lower())
+        ]
+        total_coding_seconds = sum(a.duration_seconds or 0 for a in matching_acts)
         
         results.append({
             "id": p.id,

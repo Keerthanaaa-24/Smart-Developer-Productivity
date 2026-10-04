@@ -14,14 +14,14 @@ GITHUB_HEADERS = {
 }
 
 REQUEST_TIMEOUT = httpx.Timeout(
-    connect=10.0,
-    read=30.0,
-    write=30.0,
-    pool=10.0,
+    connect=5.0,
+    read=10.0,
+    write=10.0,
+    pool=5.0,
 )
 
-MAX_RETRIES = 3
-MAX_REPOSITORIES_FOR_DETAILS = 30
+MAX_RETRIES = 2
+MAX_REPOSITORIES_FOR_DETAILS = 12
 
 # =========================================================
 # IN-MEMORY TTL CACHE
