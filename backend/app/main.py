@@ -125,6 +125,8 @@ app = FastAPI(
 
 import os
 default_origins = [
+    "https://smart-developer-productivity.vercel.app",
+    "https://smart-developer-productivity.onrender.com",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",
@@ -140,7 +142,7 @@ origins = list(set(default_origins + env_origins))
 # Regex matches all localhost/127.0.0.1 ports and preview Vercel deployments
 cors_origin_regex = os.getenv(
     "CORS_ORIGIN_REGEX",
-    r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https?://.*\.vercel\.app$",
+    r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https?://.*\.vercel\.app$|^https?://smart-developer-productivity\.onrender\.com$",
 )
 
 app.add_middleware(

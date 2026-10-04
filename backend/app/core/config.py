@@ -49,18 +49,18 @@ class Settings(BaseModel):
     GITHUB_REDIRECT_URI: str | None = os.getenv("GITHUB_REDIRECT_URI")
 
     # Frontend URL & CORS
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "https://smart-developer-productivity.vercel.app")
     ALLOWED_ORIGINS: list[str] = [
         origin.strip()
         for origin in os.getenv(
             "ALLOWED_ORIGINS",
-            "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000,http://localhost:4173,http://127.0.0.1:4173",
+            "https://smart-developer-productivity.vercel.app,https://smart-developer-productivity.onrender.com,http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000,http://localhost:4173,http://127.0.0.1:4173",
         ).split(",")
         if origin.strip()
     ]
     CORS_ORIGIN_REGEX: str = os.getenv(
         "CORS_ORIGIN_REGEX",
-        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https?://.*\.vercel\.app$",
+        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https?://.*\.vercel\.app$|^https?://smart-developer-productivity\.onrender\.com$",
     )
 
 

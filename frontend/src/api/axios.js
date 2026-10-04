@@ -8,7 +8,9 @@ const API = axios.create({
   baseURL:
     import.meta.env.VITE_API_BASE_URL ||
     import.meta.env.VITE_API_URL ||
-    "http://127.0.0.1:8001",
+    (import.meta.env.DEV
+      ? "http://127.0.0.1:8001"
+      : "https://smart-developer-productivity.onrender.com"),
   timeout: 25000, // 25s timeout prevents infinite hanging during cold starts or network latency
   headers: {
     "Content-Type": "application/json",
