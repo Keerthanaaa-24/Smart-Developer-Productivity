@@ -43,8 +43,13 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
-# Temporary files
+# Temporary & database dump files
 *.tmp
 *.temp
 *.swp
 *.swo
+*.sql
+*.db
+*.sqlite
+*.pem
+*.crt
