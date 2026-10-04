@@ -1,5 +1,6 @@
 import os
 import ssl
+import tempfile
 import logging
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine.url import make_url
@@ -15,6 +16,69 @@ if not RAW_DATABASE_URL:
     raise RuntimeError(
         "DATABASE_URL is missing from environment variables."
     )
+
+
+def _build_ssl_context(ca_cert_data: str | None = None, ca_cert_path: str | None = None) -> ssl.SSLContext:
+    """
+    Builds a secure SSLContext for cloud MySQL providers (such as Aiven MySQL 8.4)
+    using the official Project CA certificate.
+    """
+    target_ca_file = None
+    
+    # 1. Check if CA certificate PEM string is provided in environment variables
+    if ca_cert_data and ca_cert_data.strip():
+        cleaned = ca_cert_data.strip().strip("\"'")
+        cleaned = cleaned.replace("\\n", "\n")
+        if "BEGIN CERTIFICATE" not in cleaned and len(cleaned) > 50:
+            cleaned = f"-----BEGIN CERTIFICATE-----\n{cleaned}\n-----END CERTIFICATE-----\n"
+        elif not cleaned.endswith("\n"):
+            cleaned += "\n"
+
+        try:
+            # Write to a secure persistent temp file so ssl.create_default_context(cafile=...) can load it
+            tmp = tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".pem",
+                prefix="aiven_ca_",
+                delete=False,
+                encoding="utf-8",
+            )
+            tmp.write(cleaned)
+            tmp.close()
+            target_ca_file = tmp.name
+        except Exception as write_err:
+            logger.warning(f"Could not create temporary CA file: {write_err}")
+
+    # 2. Check if a CA certificate file path is provided or exists locally
+    if not target_ca_file:
+        if ca_cert_path and os.path.isfile(ca_cert_path):
+            target_ca_file = ca_cert_path
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            backend_dir = os.path.abspath(os.path.join(base_dir, "..", ".."))
+            for candidate in [
+                os.path.join(base_dir, "ca.pem"),
+                os.path.join(backend_dir, "ca.pem"),
+                os.path.join(os.getcwd(), "ca.pem"),
+            ]:
+                if os.path.isfile(candidate):
+                    target_ca_file = candidate
+                    break
+
+    # 3. Create SSLContext using the designated CA file or system trust store
+    if target_ca_file:
+        ssl_ctx = ssl.create_default_context(cafile=target_ca_file)
+    else:
+        ssl_ctx = ssl.create_default_context()
+
+    # Disable STRICT x509 verification flag to allow valid self-signed project CA certificate chains
+    if hasattr(ssl, "VERIFY_X509_STRICT"):
+        ssl_ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+
+    ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+    ssl_ctx.check_hostname = True
+    return ssl_ctx
+
 
 # Normalize URL schema prefixes for SQLAlchemy
 normalized_url = RAW_DATABASE_URL.strip()
@@ -58,24 +122,14 @@ else:
                     or os.getenv("CA_CERT")
                     or os.getenv("DATABASE_CA_CERT")
                 )
-                ca_cert_path = os.getenv("DB_SSL_CA") or os.getenv("SSL_CA_PATH")
+                ca_cert_path = (
+                    os.getenv("DB_SSL_CA")
+                    or os.getenv("SSL_CA_PATH")
+                    or os.getenv("AIVEN_CA_PATH")
+                )
 
-                if ca_cert_data and ca_cert_data.strip():
-                    # Load PEM string from environment variable (ideal for Render)
-                    ssl_ctx = ssl.create_default_context()
-                    ssl_ctx.load_verify_locations(cadata=ca_cert_data.strip())
-                    connect_args["ssl"] = ssl_ctx
-                elif ca_cert_path and os.path.isfile(ca_cert_path):
-                    # Load CA certificate from file path
-                    ssl_ctx = ssl.create_default_context(cafile=ca_cert_path)
-                    connect_args["ssl"] = ssl_ctx
-                else:
-                    # Default SSL context using system CA bundle (standard for Aiven with public / system certs)
-                    ssl_ctx = ssl.create_default_context()
-                    if os.getenv("DB_SSL_NO_VERIFY", "").lower() in ("1", "true", "yes") or os.getenv("DB_SSL_VERIFY", "").lower() in ("0", "false", "no"):
-                        ssl_ctx.check_hostname = False
-                        ssl_ctx.verify_mode = ssl.CERT_NONE
-                    connect_args["ssl"] = ssl_ctx
+                ssl_ctx = _build_ssl_context(ca_cert_data, ca_cert_path)
+                connect_args["ssl"] = ssl_ctx
             except Exception as ssl_err:
                 logger.warning(f"Failed to initialize custom SSL context: {ssl_err}")
 
@@ -122,5 +176,12 @@ def verify_database_connection() -> bool:
         return True
     except Exception as exc:
         safe_target = engine.url.render_as_string(hide_password=True)
-        logger.error(f"Database connectivity check failed for target {safe_target}: {exc}")
+        err_msg = str(exc)
+        if "CERTIFICATE_VERIFY_FAILED" in err_msg or "self-signed certificate" in err_msg:
+            logger.error(
+                f"Aiven MySQL SSL verification failed for target {safe_target}. "
+                "Please configure DB_CA_CERT in your environment with your Aiven Project CA certificate."
+            )
+        else:
+            logger.error(f"Database connectivity check failed for target {safe_target}: {exc}")
         return False
