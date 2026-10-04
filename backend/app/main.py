@@ -103,9 +103,15 @@ app.add_middleware(
 # CREATE DATABASE TABLES
 # =====================================================
 
-Base.metadata.create_all(
-    bind=engine
-)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as ddl_err:
+    import logging
+    safe_db = engine.url.render_as_string(hide_password=True)
+    logging.getLogger("uvicorn.error").error(
+        f"Database schema initialization failed for {safe_db}: {ddl_err}"
+    )
+    raise
 
 
 # =====================================================

@@ -16,10 +16,6 @@ from app.core.database import Base
 class UserSettings(Base):
     __tablename__ = "user_settings"
 
-    __table_args__ = (
-        Index("ix_user_settings_user_id", "user_id", unique=True),
-    )
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(
         Integer,
