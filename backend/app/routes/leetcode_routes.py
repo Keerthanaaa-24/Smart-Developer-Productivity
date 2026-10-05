@@ -90,11 +90,19 @@ def leetcode_status(
             "message": "LeetCode account is not connected",
         }
 
+    profile_url = (
+        connection.profile_url
+        if connection.profile_url and "/u/" in connection.profile_url
+        else f"https://leetcode.com/u/{connection.leetcode_username}/"
+    )
+
     return {
         "connected": True,
+        "username": connection.leetcode_username,
+        "profile_url": profile_url,
         "leetcode": {
             "username": connection.leetcode_username,
-            "profile_url": connection.profile_url,
+            "profile_url": profile_url,
             "problems_solved": connection.problems_solved,
             "easy_solved": connection.easy_solved,
             "medium_solved": connection.medium_solved,
@@ -128,9 +136,15 @@ def leetcode_profile(
             detail="LeetCode account is not connected",
         )
 
+    profile_url = (
+        connection.profile_url
+        if connection.profile_url and "/u/" in connection.profile_url
+        else f"https://leetcode.com/u/{connection.leetcode_username}/"
+    )
+
     return {
         "username": connection.leetcode_username,
-        "profile_url": connection.profile_url,
+        "profile_url": profile_url,
         "problems_solved": connection.problems_solved,
         "easy_solved": connection.easy_solved,
         "medium_solved": connection.medium_solved,

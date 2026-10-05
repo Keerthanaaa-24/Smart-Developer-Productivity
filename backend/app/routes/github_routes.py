@@ -453,9 +453,12 @@ def github_status(
                 "GitHub account is not connected",
         }
 
+    profile_url = connection.profile_url or f"https://github.com/{connection.github_username}"
+
     return {
         "connected": True,
-
+        "username": connection.github_username,
+        "profile_url": profile_url,
         "github": {
             "username":
                 connection.github_username,
@@ -469,8 +472,11 @@ def github_status(
             "avatar_url":
                 connection.avatar_url,
 
+            "profile_url":
+                profile_url,
+
             "connected_at":
-                connection.connected_at,
+                connection.connected_at.isoformat() if connection.connected_at else None,
         },
     }
 

@@ -97,11 +97,19 @@ def geeksforgeeks_status(
             "message": "GeeksforGeeks account is not connected",
         }
 
+    profile_url = (
+        connection.profile_url
+        if connection.profile_url and "geeksforgeeks.org/user/" in connection.profile_url
+        else f"https://www.geeksforgeeks.org/user/{connection.gfg_username}/"
+    )
+
     return {
         "connected": True,
+        "username": connection.gfg_username,
+        "profile_url": profile_url,
         "geeksforgeeks": {
             "username": connection.gfg_username,
-            "profile_url": connection.profile_url,
+            "profile_url": profile_url,
             "problems_solved": connection.problems_solved,
             "coding_score": connection.coding_score,
             "articles_published": connection.articles_published,
@@ -133,9 +141,15 @@ def geeksforgeeks_profile(
             detail="GeeksforGeeks account is not connected",
         )
 
+    profile_url = (
+        connection.profile_url
+        if connection.profile_url and "geeksforgeeks.org/user/" in connection.profile_url
+        else f"https://www.geeksforgeeks.org/user/{connection.gfg_username}/"
+    )
+
     return {
         "username": connection.gfg_username,
-        "profile_url": connection.profile_url,
+        "profile_url": profile_url,
         "problems_solved": connection.problems_solved,
         "coding_score": connection.coding_score,
         "articles_published": connection.articles_published,

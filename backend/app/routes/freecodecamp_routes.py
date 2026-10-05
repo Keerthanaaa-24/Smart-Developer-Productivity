@@ -91,11 +91,19 @@ def freecodecamp_status(
             "message": "freeCodeCamp account is not connected",
         }
 
+    profile_url = (
+        connection.profile_url
+        if connection.profile_url
+        else f"https://www.freecodecamp.org/{connection.freecodecamp_username}"
+    )
+
     return {
         "connected": True,
+        "username": connection.freecodecamp_username,
+        "profile_url": profile_url,
         "freecodecamp": {
             "username": connection.freecodecamp_username,
-            "profile_url": connection.profile_url,
+            "profile_url": profile_url,
             "certifications_count": connection.certifications_count,
         },
     }
@@ -124,9 +132,15 @@ def freecodecamp_profile(
             detail="freeCodeCamp account is not connected",
         )
 
+    profile_url = (
+        connection.profile_url
+        if connection.profile_url
+        else f"https://www.freecodecamp.org/{connection.freecodecamp_username}"
+    )
+
     return {
         "username": connection.freecodecamp_username,
-        "profile_url": connection.profile_url,
+        "profile_url": profile_url,
         "certifications_count": connection.certifications_count,
     }
 

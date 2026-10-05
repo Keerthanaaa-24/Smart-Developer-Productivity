@@ -38,9 +38,9 @@ def connect_coursera(
         .first()
     )
 
-    # Coursera profile URLs can differ depending
-    # on the user's account, so keep this configurable.
-    profile_url = "https://www.coursera.org/"
+    # Coursera does not expose public user profile pages by username.
+    # Profile URL is None for manual course tracking.
+    profile_url = None
 
     if connection:
         connection.coursera_username = username
@@ -61,6 +61,8 @@ def connect_coursera(
     return {
         "connected": True,
         "message": "Coursera account connected successfully",
+        "username": connection.coursera_username,
+        "profile_url": connection.profile_url,
         "coursera": {
             "username":
                 connection.coursera_username,
@@ -105,6 +107,8 @@ def coursera_status(
 
     return {
         "connected": True,
+        "username": connection.coursera_username,
+        "profile_url": connection.profile_url,
         "coursera": {
             "username":
                 connection.coursera_username,

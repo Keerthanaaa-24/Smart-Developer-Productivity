@@ -2,6 +2,7 @@ import {
   BrowserRouter,
   Routes,
   Route,
+  Navigate,
 } from "react-router-dom";
 
 import Home from "../pages/Home";
@@ -129,6 +130,12 @@ const AppRoutes = () => {
               <Profile />
             </ProtectedRoute>
           }
+        />
+
+        {/* Catch-all Fallback */}
+        <Route
+          path="*"
+          element={<Navigate to="/dashboard" replace />}
         />
 
       </Routes>

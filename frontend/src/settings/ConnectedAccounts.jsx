@@ -248,16 +248,23 @@ const ConnectedAccounts = () => {
     try {
       setConnecting("github");
       const response = await API.get("/github/login");
-      const authorizationUrl = response.data.authorization_url;
+      const authorizationUrl = response.data?.authorization_url;
 
       if (!authorizationUrl) {
-        throw new Error("GitHub authorization URL was not received.");
+        throw new Error("GitHub authorization URL was not received from server.");
       }
 
       window.location.href = authorizationUrl;
     } catch (error) {
       console.error("GitHub connection failed:", error);
-      alert("Unable to connect GitHub. Please try again.");
+      if (error.response?.status === 401) {
+        alert("Your session has expired. Please log in again to connect your GitHub account.");
+        window.location.href = "/login";
+      } else if (error.code === "ECONNABORTED" || error.message?.includes("timeout")) {
+        alert("Connecting to server timed out while backend was waking up. Please try connecting again.");
+      } else {
+        alert(error.response?.data?.detail || error.message || "Unable to connect GitHub. Please try again.");
+      }
       setConnecting("");
     }
   };
@@ -344,15 +351,33 @@ const ConnectedAccounts = () => {
     if (!data) return "";
 
     for (const field of platform.usernameFields || []) {
-      if (data[field]) return data[field];
+      if (data[field]) return String(data[field]);
     }
-    return data.username || data.login || "";
+    return String(data.username || data.login || "");
   };
 
   const openProfile = (platform) => {
     const data = accountData[platform.key];
-    if (data?.profile_url) {
-      window.open(data.profile_url, "_blank", "noopener,noreferrer");
+    const username = getUsername(platform);
+
+    let url = data?.profile_url;
+    if (!url && username) {
+      const cleanUser = username.replace(/^@/, "").trim();
+      if (platform.key === "github") {
+        url = `https://github.com/${cleanUser}`;
+      } else if (platform.key === "leetcode") {
+        url = `https://leetcode.com/u/${cleanUser}/`;
+      } else if (platform.key === "geeksforgeeks") {
+        url = `https://www.geeksforgeeks.org/user/${cleanUser}/`;
+      } else if (platform.key === "freecodecamp") {
+        url = `https://www.freecodecamp.org/${cleanUser}`;
+      } else if (platform.key === "linkedin") {
+        url = `https://www.linkedin.com/in/${cleanUser}/`;
+      }
+    }
+
+    if (url && typeof url === "string" && url.startsWith("http")) {
+      window.open(url, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -522,16 +547,40 @@ const ConnectedAccounts = () => {
                         </p>
                         <div className="flex items-center justify-between gap-3 mt-1">
                           <p className="font-semibold text-slate-800 dark:text-slate-200 text-xs truncate">
-                            {username || "Account Connected"}
+                            {username ? `@${username.replace(/^@/, '')}` : "Account Connected"}
                           </p>
-                          {data?.profile_url && (
-                            <button
-                              onClick={() => openProfile(platform)}
-                              className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold whitespace-nowrap cursor-pointer"
-                            >
-                              View Profile ↗
-                            </button>
-                          )}
+                          {(() => {
+                            let profileUrl = data?.profile_url;
+                            if (!profileUrl && username) {
+                              const cleanUser = username.replace(/^@/, '').trim();
+                              if (platform.key === "github") profileUrl = `https://github.com/${cleanUser}`;
+                              else if (platform.key === "leetcode") profileUrl = `https://leetcode.com/u/${cleanUser}/`;
+                              else if (platform.key === "geeksforgeeks") profileUrl = `https://www.geeksforgeeks.org/user/${cleanUser}/`;
+                              else if (platform.key === "freecodecamp") profileUrl = `https://www.freecodecamp.org/${cleanUser}`;
+                              else if (platform.key === "linkedin") profileUrl = `https://www.linkedin.com/in/${cleanUser}/`;
+                            }
+
+                            if (profileUrl && typeof profileUrl === "string" && profileUrl.startsWith("http")) {
+                              return (
+                                <a
+                                  href={profileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold whitespace-nowrap cursor-pointer"
+                                >
+                                  View Profile ↗
+                                </a>
+                              );
+                            }
+
+                            return (
+                              <span className="text-[11px] text-slate-400 dark:text-slate-500 italic">
+                                {platform.type === "manual_info" || platform.syncMode?.includes("MANUAL")
+                                  ? "Manual tracking"
+                                  : "Profile unavailable"}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
                     )}

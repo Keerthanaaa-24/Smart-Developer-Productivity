@@ -38,11 +38,9 @@ def connect_nptel(
         .first()
     )
 
-    # Keep this configurable because NPTEL profile URLs
-    # can vary depending on the account/profile format.
-    profile_url = (
-        f"https://nptel.ac.in/"
-    )
+    # NPTEL does not expose public user profile pages without institutional SSO.
+    # Profile URL is None for manual course tracking.
+    profile_url = None
 
     if connection:
         connection.nptel_username = username
@@ -63,6 +61,8 @@ def connect_nptel(
     return {
         "connected": True,
         "message": "NPTEL account connected successfully",
+        "username": connection.nptel_username,
+        "profile_url": connection.profile_url,
         "nptel": {
             "username": connection.nptel_username,
             "profile_url": connection.profile_url,
@@ -101,6 +101,8 @@ def nptel_status(
 
     return {
         "connected": True,
+        "username": connection.nptel_username,
+        "profile_url": connection.profile_url,
         "nptel": {
             "username":
                 connection.nptel_username,

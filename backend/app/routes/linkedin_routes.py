@@ -81,11 +81,19 @@ def linkedin_status(
             "notice": "Open activity feed API is restricted by LinkedIn. Manual career milestones supported.",
         }
 
+    profile_url = connection.profile_url or f"https://www.linkedin.com/in/{connection.linkedin_username}/"
+
     return {
         "connected": True,
         "username": connection.linkedin_username,
         "headline": connection.headline,
-        "profile_url": connection.profile_url,
+        "profile_url": profile_url,
+        "linkedin": {
+            "username": connection.linkedin_username,
+            "headline": connection.headline,
+            "profile_url": profile_url,
+            "connected_at": connection.created_at.isoformat() if connection.created_at else None,
+        },
         "connected_at": connection.created_at.isoformat() if connection.created_at else None,
         "sync_mode": "PROFILE ACCESS ONLY",
         "activity_mode": "Manual career tracking",
