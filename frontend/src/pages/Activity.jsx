@@ -154,30 +154,37 @@ const Activity = () => {
     return { startDateVal: null, endDateVal: null };
   }, [datePreset, customStartDate, customEndDate]);
 
-  // Fetch telemetry from backend
-  const fetchActivityData = useCallback(async () => {
-    setLoading(true);
+  // Fetch summaries once or on sync/mutation
+  const fetchSummaries = useCallback(async () => {
     try {
-      const [sumData, statusData, careerData, pipelineData, actData] = await Promise.all([
+      const [sumData, statusData, careerData, pipelineData] = await Promise.all([
         getActivitySummary().catch(() => null),
         getSyncStatus().catch(() => null),
         getCareerSummary().catch(() => null),
         getCareerApplications().catch(() => null),
-        getActivities({
-          limit: pageSize,
-          offset: page * pageSize,
-          category: selectedCategory,
-          platform: selectedPlatform,
-          startDate: startDateVal,
-          endDate: endDateVal,
-          search: debouncedSearch,
-        }),
       ]);
-
       if (sumData) setSummary(sumData);
       if (statusData) setSyncStatus(statusData);
       if (careerData) setCareerSummary(careerData);
       if (pipelineData) setCareerPipeline(pipelineData);
+    } catch (err) {
+      console.warn("Non-blocking summary load warning:", err);
+    }
+  }, []);
+
+  // Fetch paginated activities list
+  const fetchActivitiesList = useCallback(async () => {
+    setLoading(true);
+    try {
+      const actData = await getActivities({
+        limit: pageSize,
+        offset: page * pageSize,
+        category: selectedCategory,
+        platform: selectedPlatform,
+        startDate: startDateVal,
+        endDate: endDateVal,
+        search: debouncedSearch,
+      });
 
       let rawActs = actData?.activities || [];
       if (selectedSource !== "all") {
@@ -191,15 +198,19 @@ const Activity = () => {
       setActivities(rawActs);
       setTotalCount(actData?.total || 0);
     } catch (err) {
-      console.error("Failed to load activity telemetry:", err);
+      console.error("Failed to load activities list:", err);
     } finally {
       setLoading(false);
     }
   }, [page, selectedCategory, selectedPlatform, selectedSource, startDateVal, endDateVal, debouncedSearch]);
 
   useEffect(() => {
-    fetchActivityData();
-  }, [fetchActivityData]);
+    fetchSummaries();
+  }, [fetchSummaries]);
+
+  useEffect(() => {
+    fetchActivitiesList();
+  }, [fetchActivitiesList]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -211,7 +222,8 @@ const Activity = () => {
         type: "success",
         message: `Platform synchronization complete! ${totalNew} new activity record(s) processed.`,
       });
-      fetchActivityData();
+      fetchSummaries();
+      fetchActivitiesList();
     } catch (err) {
       setToast({
         type: "error",
@@ -277,7 +289,8 @@ const Activity = () => {
         interviewDate: "",
         notes: "",
       });
-      fetchActivityData();
+      fetchSummaries();
+      fetchActivitiesList();
     } catch (err) {
       setToast({ type: "error", message: "Failed to save career milestone." });
     } finally {
@@ -339,7 +352,8 @@ const Activity = () => {
         activityDate: new Date().toISOString().split("T")[0],
       });
       setToast({ type: "success", message: "Activity record saved successfully!" });
-      fetchActivityData();
+      fetchSummaries();
+      fetchActivitiesList();
     } catch (err) {
       setToast({ type: "error", message: "Failed to save activity record." });
     } finally {
@@ -352,7 +366,8 @@ const Activity = () => {
     try {
       await deleteActivity(id);
       setToast({ type: "success", message: "Activity record deleted." });
-      fetchActivityData();
+      fetchSummaries();
+      fetchActivitiesList();
     } catch (err) {
       setToast({ type: "error", message: "Failed to delete activity record." });
     }

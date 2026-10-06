@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.cache import user_cache
 from app.models.freecodecamp_connection import FreeCodeCampConnection
 from app.routes.github_routes import get_current_user_id
 
@@ -51,11 +52,13 @@ def connect_freecodecamp(
             freecodecamp_username=username,
             profile_url=profile_url,
         )
-
         db.add(connection)
 
     db.commit()
     db.refresh(connection)
+
+    # Invalidate cache on connection
+    user_cache.invalidate_user(user_id)
 
     return {
         "connected": True,
@@ -77,6 +80,10 @@ def freecodecamp_status(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
+    cached = user_cache.get(user_id, "platform_status:freecodecamp")
+    if cached is not None:
+        return cached
+
     connection = (
         db.query(FreeCodeCampConnection)
         .filter(
@@ -86,10 +93,12 @@ def freecodecamp_status(
     )
 
     if not connection:
-        return {
+        res = {
             "connected": False,
             "message": "freeCodeCamp account is not connected",
         }
+        user_cache.set(user_id, "platform_status:freecodecamp", res, ttl=30)
+        return res
 
     profile_url = (
         connection.profile_url
@@ -97,7 +106,7 @@ def freecodecamp_status(
         else f"https://www.freecodecamp.org/{connection.freecodecamp_username}"
     )
 
-    return {
+    res = {
         "connected": True,
         "username": connection.freecodecamp_username,
         "profile_url": profile_url,
@@ -107,6 +116,8 @@ def freecodecamp_status(
             "certifications_count": connection.certifications_count,
         },
     }
+    user_cache.set(user_id, "platform_status:freecodecamp", res, ttl=30)
+    return res
 
 
 # --------------------------------------------------
@@ -150,6 +161,7 @@ def freecodecamp_profile(
 # --------------------------------------------------
 
 @router.delete("/disconnect")
+@router.post("/disconnect")
 def disconnect_freecodecamp(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -171,7 +183,10 @@ def disconnect_freecodecamp(
     db.delete(connection)
     db.commit()
 
+    # Invalidate cache on disconnect
+    user_cache.invalidate_user(user_id)
+
     return {
         "connected": False,
         "message": "freeCodeCamp account disconnected",
-    }
+    }

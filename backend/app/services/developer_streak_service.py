@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 from sqlalchemy.orm import Session
 
+from app.core.cache import user_cache
 from app.models.developer_activity import DeveloperActivity
 from app.models.user_settings import UserSettings
 
@@ -93,12 +94,14 @@ def record_activity(
         db.add(activity)
 
     db.commit()
+    user_cache.invalidate_user(user_id)
 
 
 def get_developer_streak(
     db: Session,
     user_id: int,
     target_date: date | None = None,
+    force_refresh: bool = False,
 ) -> dict:
     """
     Unified Developer Streak Engine:
@@ -108,6 +111,11 @@ def get_developer_streak(
     - Preserves historical longest streak across past activity gaps.
     - Grace period: If user was active yesterday, streak is kept active while today is in progress.
     """
+    if not force_refresh and target_date is None:
+        cached = user_cache.get(user_id, "developer_streak")
+        if cached is not None:
+            return cached
+
     today = target_date or _get_user_today(db, user_id)
 
     activities = (
@@ -130,7 +138,7 @@ def get_developer_streak(
     }
 
     if not active_dates:
-        return {
+        res = {
             "current_streak": 0,
             "longest_streak": 0,
             "today_active": False,
@@ -139,6 +147,9 @@ def get_developer_streak(
             "total_active_days": 0,
             "last_active_date": None,
         }
+        if target_date is None:
+            user_cache.set(user_id, "developer_streak", res, ttl=30)
+        return res
 
     # -----------------------------------------------------
     # 1. CURRENT STREAK CALCULATION
@@ -187,7 +198,7 @@ def get_developer_streak(
 
     last_active = max(active_dates) if active_dates else None
 
-    return {
+    res = {
         "current_streak": current_streak,
         "longest_streak": longest_streak,
         "today_active": (today in active_dates),
@@ -196,3 +207,6 @@ def get_developer_streak(
         "total_active_days": len(active_dates),
         "last_active_date": str(last_active) if last_active else None,
     }
+    if target_date is None:
+        user_cache.set(user_id, "developer_streak", res, ttl=30)
+    return res

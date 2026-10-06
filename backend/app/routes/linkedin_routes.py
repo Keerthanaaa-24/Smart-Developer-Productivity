@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.cache import user_cache
 from app.models.linkedin_connection import LinkedInConnection
 from app.routes.github_routes import get_current_user_id
 
@@ -51,6 +52,9 @@ def connect_linkedin(
     db.commit()
     db.refresh(connection)
 
+    # Invalidate cache on connect
+    user_cache.invalidate_user(user_id)
+
     return {
         "message": "LinkedIn profile connected successfully",
         "username": connection.linkedin_username,
@@ -65,6 +69,10 @@ def linkedin_status(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
+    cached = user_cache.get(user_id, "platform_status:linkedin")
+    if cached is not None:
+        return cached
+
     connection = (
         db.query(LinkedInConnection)
         .filter(LinkedInConnection.user_id == user_id)
@@ -72,7 +80,7 @@ def linkedin_status(
     )
 
     if not connection:
-        return {
+        res = {
             "connected": False,
             "username": None,
             "profile_url": None,
@@ -80,10 +88,12 @@ def linkedin_status(
             "activity_mode": "Manual career tracking",
             "notice": "Open activity feed API is restricted by LinkedIn. Manual career milestones supported.",
         }
+        user_cache.set(user_id, "platform_status:linkedin", res, ttl=30)
+        return res
 
     profile_url = connection.profile_url or f"https://www.linkedin.com/in/{connection.linkedin_username}/"
 
-    return {
+    res = {
         "connected": True,
         "username": connection.linkedin_username,
         "headline": connection.headline,
@@ -99,6 +109,8 @@ def linkedin_status(
         "activity_mode": "Manual career tracking",
         "notice": "Connected ≠ Automatically tracked. LinkedIn open activity feed is restricted; manual career milestones supported.",
     }
+    user_cache.set(user_id, "platform_status:linkedin", res, ttl=30)
+    return res
 
 
 @router.post("/disconnect")
@@ -122,4 +134,8 @@ def disconnect_linkedin(
     db.delete(connection)
     db.commit()
 
+    # Invalidate cache on disconnect
+    user_cache.invalidate_user(user_id)
+
     return {"message": "LinkedIn profile disconnected successfully"}
+

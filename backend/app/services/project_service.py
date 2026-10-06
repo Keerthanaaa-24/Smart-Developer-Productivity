@@ -2,6 +2,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
+from app.core.cache import user_cache
 from app.models.project import Project
 from app.models.task import Task
 from app.models.developer_activity import DeveloperActivity
@@ -27,6 +28,7 @@ def create_project(
     db.add(project)
     db.commit()
     db.refresh(project)
+    user_cache.invalidate_user(user_id)
     return project
 
 
@@ -123,6 +125,7 @@ def update_project(
     
     db.commit()
     db.refresh(p)
+    user_cache.invalidate_user(user_id)
     return p
 
 
@@ -132,4 +135,6 @@ def delete_project(db: Session, project_id: int, user_id: int) -> bool:
         return False
     db.delete(p)
     db.commit()
+    user_cache.invalidate_user(user_id)
     return True
+

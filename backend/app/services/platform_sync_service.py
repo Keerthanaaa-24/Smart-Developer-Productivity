@@ -17,6 +17,7 @@ from app.models.geeksforgeeks_connection import GeeksForGeeksConnection
 from app.models.coursera_connection import CourseraConnection
 from app.models.nptel_connection import NPTELConnection
 from app.models.linkedin_connection import LinkedInConnection
+from app.core.cache import user_cache
 from app.services.unified_activity_service import (
     record_unified_activity,
     is_activity_tracking_enabled,
@@ -997,6 +998,8 @@ class PlatformSyncService:
         try:
             result = await provider.sync(db, user_id)
             result["platform"] = platform_key
+            if result.get("new_activities", 0) > 0:
+                user_cache.invalidate_user(user_id)
             return result
         except Exception as e:
             return {
@@ -1062,6 +1065,9 @@ class PlatformSyncService:
                 }
 
         self._user_last_sync[user_id] = now
+        if total_new_activities > 0:
+            user_cache.invalidate_user(user_id)
+
         response = {
             "status": "success",
             "synced_at": now.isoformat(),
@@ -1074,4 +1080,5 @@ class PlatformSyncService:
 
 # Global singleton instance
 platform_sync_service = PlatformSyncService()
+
 

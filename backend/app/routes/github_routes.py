@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.oauth2 import get_current_user
 from app.core.encryption import encrypt_token, decrypt_token
+from app.core.cache import user_cache
 from app.models.user import User
 from app.models.github_connection import GitHubConnection
 from app.services.activity_service import log_developer_activity
@@ -386,6 +387,9 @@ async def github_callback(
 
         db.commit()
 
+    # Invalidate user cache on OAuth connection/relinking
+    user_cache.invalidate_user(int(user_id))
+
     status_param = "relinked" if is_relinked else "connected"
     return RedirectResponse(
         url=f"{target_frontend}/settings?tab=connected&github={status_param}&username={quote_plus(github_username)}"
@@ -418,6 +422,9 @@ def github_disconnect(
     db.delete(connection)
     db.commit()
 
+    # Invalidate user cache immediately upon disconnect
+    user_cache.invalidate_user(user_id)
+
     return {
         "message": "GitHub account disconnected successfully",
         "history_preserved": True,
@@ -435,6 +442,9 @@ def github_status(
     ),
     db: Session = Depends(get_db),
 ):
+    cached = user_cache.get(user_id, "github_status")
+    if cached is not None:
+        return cached
 
     connection = (
         db.query(GitHubConnection)
@@ -446,39 +456,30 @@ def github_status(
     )
 
     if not connection:
-
-        return {
+        res = {
             "connected": False,
-            "message":
-                "GitHub account is not connected",
+            "message": "GitHub account is not connected",
         }
+        user_cache.set(user_id, "github_status", res, ttl=30)
+        return res
 
     profile_url = connection.profile_url or f"https://github.com/{connection.github_username}"
 
-    return {
+    res = {
         "connected": True,
         "username": connection.github_username,
         "profile_url": profile_url,
         "github": {
-            "username":
-                connection.github_username,
-
-            "name":
-                connection.github_name,
-
-            "email":
-                connection.github_email,
-
-            "avatar_url":
-                connection.avatar_url,
-
-            "profile_url":
-                profile_url,
-
-            "connected_at":
-                connection.connected_at.isoformat() if connection.connected_at else None,
+            "username": connection.github_username,
+            "name": connection.github_name,
+            "email": connection.github_email,
+            "avatar_url": connection.avatar_url,
+            "profile_url": profile_url,
+            "connected_at": connection.connected_at.isoformat() if connection.connected_at else None,
         },
     }
+    user_cache.set(user_id, "github_status", res, ttl=30)
+    return res
 
 
 # =========================================================

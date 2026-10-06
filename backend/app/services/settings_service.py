@@ -14,6 +14,7 @@ from app.models.nptel_connection import NPTELConnection
 from app.models.coursera_connection import CourseraConnection
 from app.models.linkedin_connection import LinkedInConnection
 from app.core.security import verify_password, hash_password
+from app.core.cache import user_cache
 
 
 def get_or_create_user_settings(db: Session, user_id: int) -> UserSettings:
@@ -117,6 +118,9 @@ def update_profile(
     db.refresh(user)
     db.refresh(settings)
 
+    # Invalidate user cache on profile update
+    user_cache.invalidate_user(user.id)
+
     return {
         "id": user.id,
         "username": user.username,
@@ -148,6 +152,9 @@ def change_password(
     user.password = hash_password(new_password)
     db.commit()
 
+    # Invalidate cache
+    user_cache.invalidate_user(user.id)
+
     return {"message": "Password updated successfully"}
 
 
@@ -159,6 +166,8 @@ def update_appearance(db: Session, user_id: int, theme: str) -> dict:
     settings.theme = theme
     db.commit()
     db.refresh(settings)
+
+    user_cache.invalidate_user(user_id)
 
     return {"theme": settings.theme}
 
@@ -179,6 +188,8 @@ def update_notifications(db: Session, user_id: int, payload: dict) -> dict:
 
     db.commit()
     db.refresh(settings)
+
+    user_cache.invalidate_user(user_id)
 
     return {
         "pomodoro_notifications": settings.pomodoro_notifications,
@@ -212,6 +223,8 @@ def update_productivity(db: Session, user_id: int, payload: dict) -> dict:
     db.commit()
     db.refresh(settings)
 
+    user_cache.invalidate_user(user_id)
+
     return {
         "daily_coding_target_hours": settings.daily_coding_target_hours,
         "daily_learning_target_hours": settings.daily_learning_target_hours,
@@ -236,6 +249,8 @@ def update_privacy(db: Session, user_id: int, payload: dict) -> dict:
 
     db.commit()
     db.refresh(settings)
+
+    user_cache.invalidate_user(user_id)
 
     return {
         "profile_visibility": settings.profile_visibility,
@@ -270,4 +285,7 @@ def delete_user_account(db: Session, user: User, confirmation_text: str) -> dict
     db.delete(user)
     db.commit()
 
+    user_cache.invalidate_user(user_id)
+
     return {"message": "Account and all associated records permanently deleted."}
+

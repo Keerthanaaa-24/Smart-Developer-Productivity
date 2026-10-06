@@ -60,12 +60,18 @@ def dashboard_stats(
 
 
 from sqlalchemy import func
+from app.core.cache import user_cache
 
 @router.get("/weekly-productivity")
 def weekly_productivity(
+    refresh: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if not refresh:
+        cached = user_cache.get(current_user.id, "weekly_productivity")
+        if cached is not None:
+            return cached
 
     today = date.today()
     start_date = today - timedelta(days=6)
@@ -96,6 +102,8 @@ def weekly_productivity(
             }
         )
 
-    return {
+    res = {
         "weekly_productivity": weekly_data
     }
+    user_cache.set(current_user.id, "weekly_productivity", res, ttl=30)
+    return res

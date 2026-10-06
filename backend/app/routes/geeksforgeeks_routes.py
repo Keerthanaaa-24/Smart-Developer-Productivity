@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.cache import user_cache
 from app.models.geeksforgeeks_connection import (
     GeeksForGeeksConnection,
 )
@@ -47,18 +48,19 @@ def connect_geeksforgeeks(
     if connection:
         connection.gfg_username = username
         connection.profile_url = profile_url
-
     else:
         connection = GeeksForGeeksConnection(
             user_id=user_id,
             gfg_username=username,
             profile_url=profile_url,
         )
-
         db.add(connection)
 
     db.commit()
     db.refresh(connection)
+
+    # Invalidate cache on connection
+    user_cache.invalidate_user(user_id)
 
     return {
         "connected": True,
@@ -83,6 +85,10 @@ def geeksforgeeks_status(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
+    cached = user_cache.get(user_id, "platform_status:geeksforgeeks")
+    if cached is not None:
+        return cached
+
     connection = (
         db.query(GeeksForGeeksConnection)
         .filter(
@@ -92,10 +98,12 @@ def geeksforgeeks_status(
     )
 
     if not connection:
-        return {
+        res = {
             "connected": False,
             "message": "GeeksforGeeks account is not connected",
         }
+        user_cache.set(user_id, "platform_status:geeksforgeeks", res, ttl=30)
+        return res
 
     profile_url = (
         connection.profile_url
@@ -103,7 +111,7 @@ def geeksforgeeks_status(
         else f"https://www.geeksforgeeks.org/user/{connection.gfg_username}/"
     )
 
-    return {
+    res = {
         "connected": True,
         "username": connection.gfg_username,
         "profile_url": profile_url,
@@ -116,6 +124,8 @@ def geeksforgeeks_status(
             "courses_completed": connection.courses_completed,
         },
     }
+    user_cache.set(user_id, "platform_status:geeksforgeeks", res, ttl=30)
+    return res
 
 
 # =========================================================
@@ -162,6 +172,7 @@ def geeksforgeeks_profile(
 # =========================================================
 
 @router.delete("/disconnect")
+@router.post("/disconnect")
 def disconnect_geeksforgeeks(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -183,7 +194,10 @@ def disconnect_geeksforgeeks(
     db.delete(connection)
     db.commit()
 
+    # Invalidate cache on disconnect
+    user_cache.invalidate_user(user_id)
+
     return {
         "connected": False,
         "message": "GeeksforGeeks account disconnected",
-    }
+    }

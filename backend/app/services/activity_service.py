@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.cache import user_cache
 from app.models.developer_activity import DeveloperActivity
 
 
@@ -29,4 +30,6 @@ def log_developer_activity(
     db.commit()
     db.refresh(activity)
 
-    return activity
+    user_cache.invalidate_user(user_id)
+
+    return activity

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.cache import user_cache
 from app.models.leetcode_connection import LeetCodeConnection
 from app.routes.github_routes import get_current_user_id
 
@@ -44,18 +45,19 @@ def connect_leetcode(
     if connection:
         connection.leetcode_username = username
         connection.profile_url = profile_url
-
     else:
         connection = LeetCodeConnection(
             user_id=user_id,
             leetcode_username=username,
             profile_url=profile_url,
         )
-
         db.add(connection)
 
     db.commit()
     db.refresh(connection)
+
+    # Invalidate user cache on connection mutation
+    user_cache.invalidate_user(user_id)
 
     return {
         "connected": True,
@@ -76,6 +78,10 @@ def leetcode_status(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
+    cached = user_cache.get(user_id, "platform_status:leetcode")
+    if cached is not None:
+        return cached
+
     connection = (
         db.query(LeetCodeConnection)
         .filter(
@@ -85,10 +91,12 @@ def leetcode_status(
     )
 
     if not connection:
-        return {
+        res = {
             "connected": False,
             "message": "LeetCode account is not connected",
         }
+        user_cache.set(user_id, "platform_status:leetcode", res, ttl=30)
+        return res
 
     profile_url = (
         connection.profile_url
@@ -96,7 +104,7 @@ def leetcode_status(
         else f"https://leetcode.com/u/{connection.leetcode_username}/"
     )
 
-    return {
+    res = {
         "connected": True,
         "username": connection.leetcode_username,
         "profile_url": profile_url,
@@ -111,6 +119,8 @@ def leetcode_status(
             "global_ranking": connection.global_ranking,
         },
     }
+    user_cache.set(user_id, "platform_status:leetcode", res, ttl=30)
+    return res
 
 
 # --------------------------------------------------
@@ -159,6 +169,7 @@ def leetcode_profile(
 # --------------------------------------------------
 
 @router.delete("/disconnect")
+@router.post("/disconnect")
 def disconnect_leetcode(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -180,7 +191,10 @@ def disconnect_leetcode(
     db.delete(connection)
     db.commit()
 
+    # Invalidate user cache on disconnect
+    user_cache.invalidate_user(user_id)
+
     return {
         "connected": False,
         "message": "LeetCode account disconnected",
-    }
+    }
