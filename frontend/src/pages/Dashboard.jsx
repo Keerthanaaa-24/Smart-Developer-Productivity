@@ -77,6 +77,15 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchOverview();
+
+    const handleBackendWarmed = () => {
+      fetchOverview(false);
+    };
+
+    window.addEventListener("backend-warmed", handleBackendWarmed);
+    return () => {
+      window.removeEventListener("backend-warmed", handleBackendWarmed);
+    };
   }, [fetchOverview]);
 
   return (

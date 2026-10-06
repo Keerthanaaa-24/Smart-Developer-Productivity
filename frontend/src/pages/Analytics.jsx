@@ -149,6 +149,15 @@ const Analytics = () => {
 
   useEffect(() => {
     loadAnalytics();
+
+    const handleBackendWarmed = () => {
+      loadAnalytics();
+    };
+
+    window.addEventListener("backend-warmed", handleBackendWarmed);
+    return () => {
+      window.removeEventListener("backend-warmed", handleBackendWarmed);
+    };
   }, [loadAnalytics]);
 
   // Languages data

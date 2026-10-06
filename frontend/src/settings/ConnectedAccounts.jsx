@@ -251,6 +251,15 @@ const ConnectedAccounts = () => {
     }
 
     checkAllConnections();
+
+    const handleBackendWarmed = () => {
+      checkAllConnections();
+    };
+
+    window.addEventListener("backend-warmed", handleBackendWarmed);
+    return () => {
+      window.removeEventListener("backend-warmed", handleBackendWarmed);
+    };
   }, [checkAllConnections]);
 
   // =====================================================

@@ -11,7 +11,7 @@ const API = axios.create({
     (import.meta.env.DEV
       ? "http://127.0.0.1:8001"
       : "https://smart-developer-productivity.onrender.com"),
-  timeout: 60000, // 60s timeout ensures resilience during cloud provider cold starts
+  timeout: 20000, // 20s timeout for fast feedback and prompt cold-start recovery
   headers: {
     "Content-Type": "application/json",
   },
@@ -86,10 +86,14 @@ API.interceptors.response.use(
       error.message?.includes("Network Error") ||
       [502, 503, 504].includes(error.response?.status);
 
+    if (isServerErrorOrTimeout && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("backend-cold-start"));
+    }
+
     if (isSafeGet && !isOAuthFlow && isServerErrorOrTimeout && !config._retry) {
       config._retry = true;
       console.info(`[Render Cold-Start] Retrying safe GET request: ${url}`);
-      // Wait 1.5s before retry
+      // Wait 1.5s before single retry
       await new Promise((resolve) => setTimeout(resolve, 1500));
       return API(config);
     }

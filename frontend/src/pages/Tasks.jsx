@@ -76,6 +76,15 @@ const Tasks = () => {
 
   useEffect(() => {
     fetchTasks();
+
+    const handleBackendWarmed = () => {
+      fetchTasks();
+    };
+
+    window.addEventListener("backend-warmed", handleBackendWarmed);
+    return () => {
+      window.removeEventListener("backend-warmed", handleBackendWarmed);
+    };
   }, []);
 
   // =====================================================

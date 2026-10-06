@@ -9,6 +9,8 @@ import {
 import AuthProvider from "./context/AuthContext";
 import ThemeProvider from "./context/ThemeContext";
 import ProtectedRoute from "./components/common/ProtectedRoute";
+import ErrorBoundary from "./components/common/ErrorBoundary";
+import BackendHealthBanner from "./components/common/BackendHealthBanner";
 
 // Lazy-loaded routes for code-splitting and rapid initial bundle loading
 const Home = lazy(() => import("./pages/Home"));
@@ -40,111 +42,114 @@ const PageLoadingFallback = () => (
 
 const App = () => {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <Suspense fallback={<PageLoadingFallback />}>
-            <Routes>
-              {/* =====================================================
-                  PUBLIC ROUTES
-              ===================================================== */}
-              <Route path="/" element={<Home />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <BackendHealthBanner />
+            <Suspense fallback={<PageLoadingFallback />}>
+              <Routes>
+                {/* =====================================================
+                    PUBLIC ROUTES
+                ===================================================== */}
+                <Route path="/" element={<Home />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
 
-              {/* =====================================================
-                  APPLICATION ROUTES (PROTECTED)
-              ===================================================== */}
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
+                {/* =====================================================
+                    APPLICATION ROUTES (PROTECTED)
+                ===================================================== */}
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/projects"
-                element={
-                  <ProtectedRoute>
-                    <Projects />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/projects"
+                  element={
+                    <ProtectedRoute>
+                      <Projects />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/activity"
-                element={
-                  <ProtectedRoute>
-                    <Activity />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/activity"
+                  element={
+                    <ProtectedRoute>
+                      <Activity />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/analytics"
-                element={
-                  <ProtectedRoute>
-                    <Analytics />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/analytics"
+                  element={
+                    <ProtectedRoute>
+                      <Analytics />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/tasks"
-                element={
-                  <ProtectedRoute>
-                    <Tasks />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/tasks"
+                  element={
+                    <ProtectedRoute>
+                      <Tasks />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/pomodoro"
-                element={
-                  <ProtectedRoute>
-                    <Pomodoro />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/pomodoro"
+                  element={
+                    <ProtectedRoute>
+                      <Pomodoro />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/profile"
-                element={
-                  <ProtectedRoute>
-                    <Profile />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedRoute>
+                      <Profile />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/settings"
-                element={
-                  <ProtectedRoute>
-                    <Settings />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/settings"
+                  element={
+                    <ProtectedRoute>
+                      <Settings />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/github"
-                element={
-                  <ProtectedRoute>
-                    <GithubIntegration />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/github"
+                  element={
+                    <ProtectedRoute>
+                      <GithubIntegration />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* =====================================================
-                  FALLBACK
-              ===================================================== */}
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-      </AuthProvider>
-    </ThemeProvider>
+                {/* =====================================================
+                    FALLBACK
+                ===================================================== */}
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 };
 

@@ -68,6 +68,15 @@ const Projects = () => {
 
   useEffect(() => {
     loadProjects();
+
+    const handleBackendWarmed = () => {
+      loadProjects();
+    };
+
+    window.addEventListener("backend-warmed", handleBackendWarmed);
+    return () => {
+      window.removeEventListener("backend-warmed", handleBackendWarmed);
+    };
   }, []);
 
   const projectStats = useMemo(() => {
