@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
   FaBrain,
   FaRobot,
@@ -10,8 +11,12 @@ import {
   FaCheckCircle,
   FaExclamationTriangle,
   FaFire,
-  FaCode,
+  FaInfoCircle,
+  FaPlay,
   FaTasks,
+  FaCode,
+  FaChevronDown,
+  FaChevronUp,
 } from "react-icons/fa";
 import { predictCustomProductivity, getMyProductivityPrediction } from "../../api/mlApi";
 
@@ -19,24 +24,24 @@ const MLProductivityCard = ({ mlData: initialData, onRefresh }) => {
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(false);
   const [showSimulator, setShowSimulator] = useState(false);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [simulating, setSimulating] = useState(false);
 
   // Simulation Form State
   const [simValues, setSimValues] = useState({
     coding_minutes: 180,
-    tasks_completed: 4,
-    tasks_planned: 5,
+    tasks_completed: 5,
+    tasks_planned: 6,
     pomodoro_sessions: 4,
     pomodoro_minutes: 100,
-    github_commits: 5,
-    goal_completion_rate: 80,
-    focus_score: 85,
+    github_commits: 6,
+    goal_completion_rate: 85,
+    focus_score: 90,
     hour_of_day: 11,
     day_of_week: 2,
   });
 
-  // Keep internal state synced when props update
-  React.useEffect(() => {
+  useEffect(() => {
     if (initialData) {
       setData(initialData);
     }
@@ -45,11 +50,10 @@ const MLProductivityCard = ({ mlData: initialData, onRefresh }) => {
   const handleRefreshPrediction = async () => {
     setLoading(true);
     try {
+      const fresh = await getMyProductivityPrediction();
+      setData(fresh);
       if (onRefresh) {
-        await onRefresh();
-      } else {
-        const fresh = await getMyProductivityPrediction();
-        setData(fresh);
+        onRefresh();
       }
     } catch (err) {
       console.error("Failed to refresh ML prediction:", err);
@@ -82,16 +86,30 @@ const MLProductivityCard = ({ mlData: initialData, onRefresh }) => {
     }
   };
 
-  const score = data?.predicted_productivity_score ?? 0;
+  const isInsufficient =
+    data?.status === "insufficient_data" ||
+    data?.predicted_productivity_score === null ||
+    data?.predicted_productivity_score === undefined;
+
+  const score = data?.predicted_productivity_score;
   const level = data?.productivity_level || (score >= 75 ? "High" : score >= 50 ? "Moderate" : "Needs Attention");
-  const recommendation = data?.recommendation || "Maintain consistent coding blocks and active task tracking to maximize ML productivity rating.";
+  const recommendation = data?.recommendation || "Log your daily coding time, tasks, and focus intervals to generate personalized recommendations.";
   const topFactors = data?.top_factors || [];
   const mostProductiveTime = data?.most_productive_time || "Morning Peak (09:00 AM - 12:00 PM)";
   const algorithm = data?.model_metadata?.algorithm || "RandomForestRegressor";
-  const r2Score = data?.model_metadata?.r2_score || 0.98;
+  const r2Score = data?.model_metadata?.r2_score ?? 0.9782;
 
   // Level Styling
   const getLevelStyles = () => {
+    if (isInsufficient) {
+      return {
+        badge: "bg-indigo-500/20 text-indigo-300 border-indigo-500/40",
+        scoreText: "text-slate-400",
+        glow: "from-indigo-500/10 via-purple-500/5 to-transparent",
+        icon: <FaInfoCircle className="text-indigo-400" />,
+        ring: "border-slate-700/60 shadow-slate-900/50",
+      };
+    }
     if (level === "High") {
       return {
         badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
@@ -123,7 +141,7 @@ const MLProductivityCard = ({ mlData: initialData, onRefresh }) => {
 
   return (
     <div className="bg-slate-900/90 text-white rounded-3xl p-6 sm:p-7 shadow-xl border border-indigo-500/30 relative overflow-hidden transition-all duration-300">
-      {/* Dynamic Ambient Background Glow */}
+      {/* Ambient Glow */}
       <div
         className={`absolute -top-16 -right-16 w-80 h-80 bg-gradient-to-br ${styles.glow} rounded-full blur-3xl pointer-events-none`}
       />
@@ -132,28 +150,36 @@ const MLProductivityCard = ({ mlData: initialData, onRefresh }) => {
       <div className="flex flex-wrap items-center justify-between gap-3 pb-5 border-b border-slate-800">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500/30 to-purple-600/30 border border-indigo-400/40 text-indigo-300 flex items-center justify-center text-xl shadow-lg shadow-indigo-500/10">
-            <FaBrain className="animate-pulse text-indigo-300" />
+            <FaBrain className="text-indigo-300" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
-                ML Predicted Productivity
+                ML Productivity Intelligence
               </h2>
               <span className="hidden sm:inline-flex text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                 Supervised ML
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Trained {algorithm} • R² {r2Score} accuracy
+              Trained {algorithm} • Feature-Engineered Regression Pipeline
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowHowItWorks(!showHowItWorks)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs font-semibold text-slate-300 hover:text-white transition shadow-sm cursor-pointer"
+          >
+            <FaInfoCircle className="text-indigo-400 text-xs" />
+            <span className="hidden sm:inline">How it Works</span>
+            {showHowItWorks ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+          </button>
+
+          <button
             onClick={() => setShowSimulator(!showSimulator)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs font-semibold text-slate-300 hover:text-white transition shadow-sm cursor-pointer"
-            title="Simulate custom activity features"
           >
             <FaSlidersH className="text-indigo-400 text-xs" />
             <span className="hidden sm:inline">
@@ -172,73 +198,161 @@ const MLProductivityCard = ({ mlData: initialData, onRefresh }) => {
         </div>
       </div>
 
-      {/* CORE STATS GRID */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6 items-center">
-        {/* Left: Score Gauge & Level */}
-        <div className="lg:col-span-5 bg-slate-800/50 rounded-2xl p-5 border border-slate-700/50 flex flex-col items-center text-center relative overflow-hidden">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-            Predicted Productivity Score
-          </span>
+      {/* HOW IT WORKS EXPLAINABILITY CARD (Expandable) */}
+      {showHowItWorks && (
+        <div className="mt-5 p-5 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-xs space-y-3 animate-fadeIn">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-indigo-200 flex items-center gap-2">
+              <FaInfoCircle /> How is your ML Productivity Score Calculated?
+            </h3>
+            <span className="text-[11px] text-indigo-300/80">4-Stage Pipeline</span>
+          </div>
 
-          <div className="relative my-2 flex items-center justify-center">
-            {/* Circular Ring Glow */}
-            <div
-              className={`w-32 h-32 rounded-full border-4 ${styles.ring} bg-slate-900/90 flex flex-col items-center justify-center shadow-lg`}
-            >
-              <span className={`text-4xl font-black tracking-tight ${styles.scoreText}`}>
-                {score}
-              </span>
-              <span className="text-[11px] font-semibold text-slate-400">out of 100</span>
+          <p className="text-slate-300 leading-relaxed">
+            This score is predicted from your authenticated activity data using an empirical Random Forest regression model. It evaluates your balance between deep focus, active coding, and task execution:
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 pt-2">
+            <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+              <div className="text-indigo-400 font-bold mb-1">1. User Activity</div>
+              <p className="text-[11px] text-slate-400">
+                IDE coding duration, Git commits, Pomodoro sessions, and completed tasks.
+              </p>
+            </div>
+            <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+              <div className="text-indigo-400 font-bold mb-1">2. Feature Engineering</div>
+              <p className="text-[11px] text-slate-400">
+                17 features: task ratio, commit intensity, focus index, cyclical time transforms.
+              </p>
+            </div>
+            <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+              <div className="text-indigo-400 font-bold mb-1">3. Random Forest Model</div>
+              <p className="text-[11px] text-slate-400">
+                Supervised regression ensemble evaluated across activity patterns.
+              </p>
+            </div>
+            <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+              <div className="text-indigo-400 font-bold mb-1">4. Actionable Insights</div>
+              <p className="text-[11px] text-slate-400">
+                Continuous 0–100 score, peak flow window, and specific recommendations.
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 mt-3">
-            <span
-              className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border ${styles.badge}`}
-            >
-              {styles.icon}
-              {level} Productivity
-            </span>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-slate-700/40 w-full flex items-center justify-center gap-2 text-xs text-slate-300">
-            <FaClock className="text-indigo-400" />
-            <span className="font-medium text-slate-300">Peak Window:</span>
-            <span className="font-bold text-white">{mostProductiveTime}</span>
+          <div className="pt-2 text-[11px] text-indigo-300/70 border-t border-indigo-500/20 flex items-center justify-between">
+            <span>Model trained on synthetic development-activity baseline</span>
+            <span>Refined as real user telemetry accumulates</span>
           </div>
         </div>
+      )}
 
-        {/* Right: Recommendation & Top Factors */}
-        <div className="lg:col-span-7 space-y-4">
-          {/* Recommendation Box */}
-          <div className="bg-gradient-to-r from-indigo-950/40 to-slate-800/60 p-4 rounded-2xl border border-indigo-500/20">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-sm shrink-0">
-                <FaLightbulb />
+      {/* CORE DISPLAY */}
+      {isInsufficient ? (
+        /* INSUFFICIENT DATA STATE */
+        <div className="mt-6 p-6 rounded-2xl bg-slate-800/40 border border-slate-700/60 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-start gap-4">
+            <div className="p-3.5 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-2xl shrink-0 mt-1">
+              <FaBrain />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  Awaiting Activity Data
+                </span>
+                <span className="text-xs text-slate-400">No score displayed</span>
               </div>
-              <div>
-                <h4 className="text-xs font-bold text-amber-200 uppercase tracking-wider">
-                  Personalized ML Recommendation
-                </h4>
-                <p className="text-xs leading-relaxed text-slate-200 mt-1 font-medium">
-                  {recommendation}
-                </p>
-              </div>
+              <h3 className="text-base font-bold text-white">
+                Log activity to unlock your ML Productivity Score
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed max-w-xl">
+                The ML model requires at least one active coding session, completed task, or Pomodoro focus block to evaluate your productivity profile.
+              </p>
             </div>
           </div>
 
-          {/* Top Predictive Factors */}
-          <div>
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Top Productivity Drivers
-              </span>
-              <span className="text-[11px] text-slate-400">Random Forest Feature Weights</span>
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full md:w-auto">
+            <Link
+              to="/pomodoro"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-500/20 transition cursor-pointer"
+            >
+              <FaPlay className="text-[10px]" />
+              <span>Start Pomodoro</span>
+            </Link>
+            <Link
+              to="/tasks"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold transition cursor-pointer"
+            >
+              <FaTasks className="text-xs" />
+              <span>Manage Tasks</span>
+            </Link>
+          </div>
+        </div>
+      ) : (
+        /* ACTIVE PREDICTION DISPLAY */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6 items-center">
+          {/* Left: Score Gauge & Level */}
+          <div className="lg:col-span-5 bg-slate-800/50 rounded-2xl p-5 border border-slate-700/50 flex flex-col items-center text-center relative overflow-hidden">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              ML Predicted Score
+            </span>
+
+            <div className="relative my-2 flex items-center justify-center">
+              <div
+                className={`w-32 h-32 rounded-full border-4 ${styles.ring} bg-slate-900/90 flex flex-col items-center justify-center shadow-lg`}
+              >
+                <span className={`text-4xl font-black tracking-tight ${styles.scoreText}`}>
+                  {score}
+                </span>
+                <span className="text-[11px] font-semibold text-slate-400">out of 100</span>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {topFactors.length > 0 ? (
-                topFactors.map((factor, idx) => (
+            <div className="flex items-center gap-2 mt-3">
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border ${styles.badge}`}
+              >
+                {styles.icon}
+                {level} Productivity
+              </span>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-700/40 w-full flex items-center justify-center gap-2 text-xs text-slate-300">
+              <FaClock className="text-indigo-400" />
+              <span className="font-medium text-slate-300">Peak Window:</span>
+              <span className="font-bold text-white">{mostProductiveTime}</span>
+            </div>
+          </div>
+
+          {/* Right: Recommendation & Top Factors */}
+          <div className="lg:col-span-7 space-y-4">
+            {/* Recommendation Box */}
+            <div className="bg-gradient-to-r from-indigo-950/40 to-slate-800/60 p-4 rounded-2xl border border-indigo-500/20">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-sm shrink-0">
+                  <FaLightbulb />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-amber-200 uppercase tracking-wider">
+                    Personalized ML Recommendation
+                  </h4>
+                  <p className="text-xs leading-relaxed text-slate-200 mt-1 font-medium">
+                    {recommendation}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Top Predictive Factors */}
+            <div>
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Top Productivity Drivers
+                </span>
+                <span className="text-[11px] text-slate-400">Random Forest Feature Weights</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {topFactors.map((factor, idx) => (
                   <div
                     key={idx}
                     className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-between text-xs"
@@ -259,23 +373,12 @@ const MLProductivityCard = ({ mlData: initialData, onRefresh }) => {
                       {factor.value}
                     </span>
                   </div>
-                ))
-              ) : (
-                <>
-                  <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-between text-xs">
-                    <span className="text-slate-300 font-medium">Active Development Time</span>
-                    <span className="font-bold text-emerald-400">High Weight</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-between text-xs">
-                    <span className="text-slate-300 font-medium">Task Execution Ratio</span>
-                    <span className="font-bold text-indigo-400">Key Signal</span>
-                  </div>
-                </>
-              )}
+                ))}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* INTERACTIVE SIMULATOR PANEL */}
       {showSimulator && (

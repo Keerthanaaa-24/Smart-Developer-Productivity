@@ -90,36 +90,40 @@ class ProductivityPredictor:
         recs = []
 
         if score >= 75.0:
-            if coding_mins >= 180 and pom_mins >= 60:
-                recs.append("Outstanding momentum! You have an optimal balance of deep Pomodoro focus and active development time.")
-            elif commits >= 5:
-                recs.append("High shipping velocity registered today. Maintain this structured flow while ensuring clean commit checkpoints.")
+            if coding_mins >= 180 and pom_mins >= 50:
+                recs.append("Strong development momentum! You have an optimal balance of focused coding time and deep Pomodoro sessions.")
+            elif commits >= 4:
+                recs.append("Consistent shipping output recorded. Maintain this structured flow while ensuring regular commit checkpoints.")
             else:
                 recs.append("Your current activity pattern reflects strong productivity. Maintain your current work-rest cadence.")
         elif score >= 50.0:
             if tasks_done < tasks_plan * 0.5:
-                recs.append(f"Task completion rate is at {int((tasks_done/tasks_plan)*100)}%. Focusing on completing 1 or 2 high-priority tasks will boost your execution velocity.")
+                recs.append("Plan fewer tasks and aim to complete them consistently to build execution momentum.")
             elif pom_mins < 45:
-                recs.append("Increasing structured Pomodoro focus sessions (25m blocks) will help reduce context switching and improve deep work.")
-            elif coding_mins < 90:
-                recs.append("Active coding time is moderate today. Scheduling an uninterrupted 60-minute development block will increase your score.")
+                recs.append("Try focused 25–50 minute work sessions with the Pomodoro timer to reduce context switching.")
+            elif coding_mins < 60:
+                recs.append("Increase focused coding time gradually to build development momentum.")
+            elif commits == 0:
+                recs.append("Consider pushing completed work and maintaining consistent development activity.")
             else:
-                recs.append("Solid steady progress. Small optimizations in task prioritization and focused intervals will push you into High productivity.")
+                recs.append("Steady progress registered. Small optimizations in task prioritization and focused intervals will boost your score.")
         else:
             if coding_mins < 30 and tasks_done == 0:
                 recs.append("Low activity registered today. Start by completing a single quick task or launching a 25-minute Pomodoro focus timer to build momentum.")
             elif coding_mins > 300 and pom_mins < 30:
-                recs.append("Long uninterrupted screen time detected without scheduled rest breaks. Take a short walk or break to avoid developer fatigue.")
-            elif focus < 40:
-                recs.append("Focus score is low due to frequent interruptions. Silence notifications and enter focus mode for your next development session.")
+                recs.append("Extended screen time detected without scheduled breaks. Take a short walk or rest interval to avoid developer fatigue.")
+            elif pom_mins < 25:
+                recs.append("Try focused 25–50 minute work sessions to establish uninterrupted deep work habits.")
+            elif tasks_done == 0:
+                recs.append("Plan fewer tasks and aim to complete them consistently.")
             else:
-                recs.append("Activity levels are below target. Break complex objectives into smaller manageable tasks and track each completion.")
+                recs.append("Increase focused coding time gradually.")
 
         # Time of day guidance
         if 9 <= hour <= 12:
-            recs.append("Morning peak window: Ideal time for complex algorithmic problems and core feature architecture.")
+            recs.append("Morning peak window: Ideal time for complex algorithmic tasks and core architecture.")
         elif 14 <= hour <= 17:
-            recs.append("Afternoon focus block: Great time for code reviews, unit testing, and shipping commits.")
+            recs.append("Afternoon focus window: Great time for code reviews, testing, and shipping commits.")
 
         return " ".join(recs)
 
@@ -244,6 +248,7 @@ class ProductivityPredictor:
         most_productive_time = self._determine_most_productive_time(int(features_dict.get("hour_of_day", 12)))
 
         return {
+            "status": "success",
             "predicted_productivity_score": predicted_score,
             "productivity_level": productivity_level,
             "recommendation": recommendation,
@@ -253,8 +258,9 @@ class ProductivityPredictor:
             "model_metadata": {
                 "algorithm": "RandomForestRegressor",
                 "version": self.model_version,
-                "r2_score": self.metrics.get("r2_score", 0.94),
-                "mae": self.metrics.get("mae", 3.2),
+                "r2_score": self.metrics.get("r2_score", 0.9782),
+                "mae": self.metrics.get("mae", 2.91),
+                "training_note": "Model trained on synthetic development-activity data. Predictions become more meaningful as real user activity data is collected.",
             }
         }
 

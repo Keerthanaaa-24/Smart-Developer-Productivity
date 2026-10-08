@@ -31,6 +31,7 @@ from app.services.github_service import (
     get_github_statistics,
     get_github_contribution_streak,
     get_github_daily_contributions,
+    clear_github_cache,
 )
 from app.services.developer_streak_service import (
     record_activity,
@@ -387,8 +388,9 @@ async def github_callback(
 
         db.commit()
 
-    # Invalidate user cache on OAuth connection/relinking
+    # Invalidate user cache and GitHub in-memory cache on OAuth connection/relinking
     user_cache.invalidate_user(int(user_id))
+    clear_github_cache(github_username)
 
     status_param = "relinked" if is_relinked else "connected"
     return RedirectResponse(
@@ -419,11 +421,13 @@ def github_disconnect(
         )
 
     # Delete the connection record without deleting DeveloperActivity history
+    saved_username = connection.github_username
     db.delete(connection)
     db.commit()
 
-    # Invalidate user cache immediately upon disconnect
+    # Invalidate user cache and GitHub in-memory cache immediately upon disconnect
     user_cache.invalidate_user(user_id)
+    clear_github_cache(saved_username)
 
     return {
         "message": "GitHub account disconnected successfully",

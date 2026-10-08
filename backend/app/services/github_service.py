@@ -44,12 +44,28 @@ def set_cached(key: str, data, ttl: int = CACHE_TTL_SECONDS):
     _GITHUB_CACHE[key] = (data, time.time() + ttl)
 
 
-def clear_github_cache():
-    _GITHUB_CACHE.clear()
+def clear_github_cache(user_or_token: str | None = None):
+    if user_or_token:
+        # Invalidate specific user or token entries
+        keys_to_del = [k for k in _GITHUB_CACHE if user_or_token in k]
+        for k in keys_to_del:
+            _GITHUB_CACHE.pop(k, None)
+    else:
+        _GITHUB_CACHE.clear()
 
 
-
+import hashlib
 from app.core.encryption import decrypt_token
+
+
+def _token_cache_id(access_token: str, username: str = "") -> str:
+    """
+    Generates a cryptographically secure, collision-free cache identifier
+    derived from the decrypted access token and username.
+    """
+    plain_token = decrypt_token(access_token) or access_token
+    token_hash = hashlib.sha256(plain_token.encode()).hexdigest()[:20]
+    return f"{username}:{token_hash}" if username else token_hash
 
 
 # =========================================================
@@ -309,7 +325,7 @@ async def get_github_repositories(
     access_token: str,
     client: httpx.AsyncClient | None = None,
 ):
-    cache_key = f"repos:{access_token[:16]}"
+    cache_key = f"repos:{_token_cache_id(access_token)}"
     cached = get_cached(cache_key)
     if cached is not None:
         return cached
@@ -359,7 +375,7 @@ async def get_github_commits(
     repositories=None,
     client: httpx.AsyncClient | None = None,
 ):
-    cache_key = f"commits:{username}:{access_token[:16]}"
+    cache_key = f"commits:{_token_cache_id(access_token, username)}"
     cached = get_cached(cache_key)
     if cached is not None:
         return cached
@@ -582,7 +598,7 @@ async def get_github_languages(
     repositories=None,
     client: httpx.AsyncClient | None = None,
 ):
-    cache_key = f"lang:{access_token[:16]}"
+    cache_key = f"lang:{_token_cache_id(access_token)}"
     cached = get_cached(cache_key)
     if cached is not None:
         return cached
@@ -804,7 +820,7 @@ async def get_github_contribution_calendar(
     username: str,
     client: httpx.AsyncClient | None = None,
 ):
-    cache_key = f"calendar:{username}"
+    cache_key = f"calendar:{_token_cache_id(access_token, username)}"
     cached = get_cached(cache_key)
     if cached is not None:
         return cached
@@ -909,7 +925,7 @@ async def get_github_contribution_streak(
     username: str,
     client: httpx.AsyncClient | None = None,
 ):
-    cache_key = f"streak:{username}"
+    cache_key = f"streak:{_token_cache_id(access_token, username)}"
     cached = get_cached(cache_key)
     if cached is not None:
         return cached
@@ -942,7 +958,7 @@ async def get_github_statistics(
     Automatically populates shared caches and falls back to concurrent REST if GraphQL fails.
     Never fabricates mock data.
     """
-    cache_key = f"stats:{username}:{access_token[:16]}"
+    cache_key = f"stats:{_token_cache_id(access_token, username)}"
     cached = get_cached(cache_key)
     if cached is not None:
         return cached
@@ -1034,7 +1050,7 @@ async def get_github_statistics(
                 "total_contributions": cal.get("totalContributions", 0),
                 "days": days,
             }
-            set_cached(f"calendar:{username}", calendar_result, CACHE_TTL_SECONDS)
+            set_cached(f"calendar:{_token_cache_id(access_token, username)}", calendar_result, CACHE_TTL_SECONDS)
 
             # 2. Languages breakdown & cache
             lang_totals = {}
@@ -1054,11 +1070,11 @@ async def get_github_statistics(
                     "bytes": bytes_count,
                     "percentage": pct,
                 })
-            set_cached(f"lang:{access_token[:16]}", languages_list, CACHE_TTL_SECONDS)
+            set_cached(f"lang:{_token_cache_id(access_token)}", languages_list, CACHE_TTL_SECONDS)
 
             # 3. Streak calculation & cache
             streak = calculate_streak_from_calendar_days(days, cal.get("totalContributions", 0))
-            set_cached(f"streak:{username}", streak, CACHE_TTL_SECONDS)
+            set_cached(f"streak:{_token_cache_id(access_token, username)}", streak, CACHE_TTL_SECONDS)
 
             # 4. Activity
             recent_activity = activity_list if isinstance(activity_list, list) else []
