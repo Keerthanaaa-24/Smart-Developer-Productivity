@@ -13,3 +13,7 @@ email-validator
 python-multipart
 httpx
 gunicorn
+numpy
+pandas
+scikit-learn
+joblib

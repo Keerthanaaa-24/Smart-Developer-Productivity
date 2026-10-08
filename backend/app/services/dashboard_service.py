@@ -909,7 +909,6 @@ def get_dashboard_overview(db: Session, user_id: int, force_refresh: bool = Fals
             "time": time_str,
             "date": str(a.activity_date),
         })
-
     # 11. AI Insights from Real Telemetry
     ai_insights = generate_ai_insights(
         user_name=user_name,
@@ -920,6 +919,15 @@ def get_dashboard_overview(db: Session, user_id: int, force_refresh: bool = Fals
         weekly_productivity=weekly_productivity,
         career_summary=career_summary,
     )
+
+    # 12. ML Productivity Prediction Engine
+    ml_prediction = None
+    try:
+        from app.services.ml_service import ml_productivity_service
+        ml_prediction = ml_productivity_service.predict_for_user(db, user_id, save_to_db=True)
+    except Exception as ml_err:
+        import logging
+        logging.getLogger("uvicorn.error").warning(f"ML prediction overview hook warning: {ml_err}")
 
     overview_res = {
         "user": {
@@ -943,7 +951,9 @@ def get_dashboard_overview(db: Session, user_id: int, force_refresh: bool = Fals
         "weekly_productivity": weekly_productivity,
         "timeline": timeline,
         "ai_insights": ai_insights,
+        "ml_prediction": ml_prediction,
     }
 
     user_cache.set(user_id, "overview", overview_res, ttl=20)
-    return overview_res
+    return overview_res
+

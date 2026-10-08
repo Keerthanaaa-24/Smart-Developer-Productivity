@@ -4,6 +4,7 @@ import API from "../api/axios";
 
 import DashboardHero from "../components/dashboard/DashboardHero";
 import PrimaryFiveMetrics from "../components/dashboard/PrimaryFiveMetrics";
+import MLProductivityCard from "../components/dashboard/MLProductivityCard";
 import ProductivityChart from "../components/dashboard/ProductivityChart";
 import StreakCard from "../components/dashboard/StreakCard";
 import CareerActivityCard from "../components/dashboard/CareerActivityCard";
@@ -124,6 +125,16 @@ const Dashboard = () => {
           <PrimaryFiveMetrics
             metrics={overview?.primary_metrics}
             todaySummary={overview?.today_summary}
+          />
+        )}
+
+        {/* STAGE 1.5: Real-Time Machine Learning Productivity Intelligence */}
+        {loading && !overview ? (
+          <SkeletonBlock className="h-64" />
+        ) : (
+          <MLProductivityCard
+            mlData={overview?.ml_prediction}
+            onRefresh={() => fetchOverview(true)}
           />
         )}
 

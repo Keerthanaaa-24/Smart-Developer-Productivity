@@ -1,0 +1,105 @@
+{
+  "evaluation_timestamp": "2026-10-08T07:37:28.797454+00:00",
+  "model_type": "RandomForestRegressor",
+  "sample_count": 5000,
+  "metrics": {
+    "r2_score": 0.9903,
+    "mae": 1.9574,
+    "rmse": 2.555,
+    "mse": 6.528
+  },
+  "error_distribution": {
+    "mean_residual": 0.0663,
+    "std_residual": 2.5541,
+    "median_abs_error_p50": 1.5451,
+    "p90_abs_error": 4.1196,
+    "p95_abs_error": 5.1905
+  },
+  "feature_importances": [
+    {
+      "feature": "goal_completion_rate",
+      "importance": 0.5629,
+      "percentage": "56.29%"
+    },
+    {
+      "feature": "coding_minutes",
+      "importance": 0.2848,
+      "percentage": "28.48%"
+    },
+    {
+      "feature": "pomodoro_minutes",
+      "importance": 0.0835,
+      "percentage": "8.35%"
+    },
+    {
+      "feature": "github_commits",
+      "importance": 0.0351,
+      "percentage": "3.51%"
+    },
+    {
+      "feature": "focus_score",
+      "importance": 0.0116,
+      "percentage": "1.16%"
+    },
+    {
+      "feature": "task_completion_ratio",
+      "importance": 0.0099,
+      "percentage": "0.99%"
+    },
+    {
+      "feature": "commit_intensity",
+      "importance": 0.0033,
+      "percentage": "0.33%"
+    },
+    {
+      "feature": "tasks_completed",
+      "importance": 0.0017,
+      "percentage": "0.17%"
+    },
+    {
+      "feature": "coding_to_pomodoro_ratio",
+      "importance": 0.0016,
+      "percentage": "0.16%"
+    },
+    {
+      "feature": "tasks_planned",
+      "importance": 0.0012,
+      "percentage": "0.12%"
+    },
+    {
+      "feature": "pomodoro_sessions",
+      "importance": 0.001,
+      "percentage": "0.10%"
+    },
+    {
+      "feature": "hour_cos",
+      "importance": 0.0009,
+      "percentage": "0.09%"
+    },
+    {
+      "feature": "hour_sin",
+      "importance": 0.0009,
+      "percentage": "0.09%"
+    },
+    {
+      "feature": "is_peak_hours",
+      "importance": 0.0007,
+      "percentage": "0.07%"
+    },
+    {
+      "feature": "day_sin",
+      "importance": 0.0005,
+      "percentage": "0.05%"
+    },
+    {
+      "feature": "day_cos",
+      "importance": 0.0004,
+      "percentage": "0.04%"
+    },
+    {
+      "feature": "is_weekend",
+      "importance": 0.0,
+      "percentage": "0.00%"
+    }
+  ]
+}

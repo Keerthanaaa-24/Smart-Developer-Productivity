@@ -55,6 +55,7 @@ from app.routes.settings_routes import router as settings_router
 from app.routes.project_routes import router as project_router
 from app.routes.organization_routes import router as organization_router
 from app.routes.notification_routes import router as notification_router
+from app.routes.ml_routes import router as ml_router
 
 
 # =====================================================
@@ -239,6 +240,10 @@ app.include_router(
 
 app.include_router(
     notification_router
+)
+
+app.include_router(
+    ml_router
 )
 
 

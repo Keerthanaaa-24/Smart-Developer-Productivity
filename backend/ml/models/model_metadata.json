@@ -1,0 +1,95 @@
+{
+  "model_name": "Developer Productivity RandomForestRegressor",
+  "algorithm": "RandomForestRegressor",
+  "version": "1.0.0",
+  "trained_at": "2026-10-08T07:37:28.728145+00:00",
+  "hyperparameters": {
+    "n_estimators": 50,
+    "max_depth": 10,
+    "min_samples_split": 4,
+    "min_samples_leaf": 2,
+    "random_state": 42
+  },
+  "dataset_info": {
+    "total_samples": 5000,
+    "train_samples": 4000,
+    "test_samples": 1000,
+    "is_synthetic_baseline": true
+  },
+  "evaluation_metrics": {
+    "r2_score": 0.9782,
+    "mae": 2.9101,
+    "rmse": 3.7048,
+    "mse": 13.7252
+  },
+  "feature_importances": [
+    {
+      "feature": "goal_completion_rate",
+      "importance": 0.5629
+    },
+    {
+      "feature": "coding_minutes",
+      "importance": 0.2848
+    },
+    {
+      "feature": "pomodoro_minutes",
+      "importance": 0.0835
+    },
+    {
+      "feature": "github_commits",
+      "importance": 0.0351
+    },
+    {
+      "feature": "focus_score",
+      "importance": 0.0116
+    },
+    {
+      "feature": "task_completion_ratio",
+      "importance": 0.0099
+    },
+    {
+      "feature": "commit_intensity",
+      "importance": 0.0033
+    },
+    {
+      "feature": "tasks_completed",
+      "importance": 0.0017
+    },
+    {
+      "feature": "coding_to_pomodoro_ratio",
+      "importance": 0.0016
+    },
+    {
+      "feature": "tasks_planned",
+      "importance": 0.0012
+    },
+    {
+      "feature": "pomodoro_sessions",
+      "importance": 0.001
+    },
+    {
+      "feature": "hour_cos",
+      "importance": 0.0009
+    },
+    {
+      "feature": "hour_sin",
+      "importance": 0.0009
+    },
+    {
+      "feature": "is_peak_hours",
+      "importance": 0.0007
+    },
+    {
+      "feature": "day_sin",
+      "importance": 0.0005
+    },
+    {
+      "feature": "day_cos",
+      "importance": 0.0004
+    },
+    {
+      "feature": "is_weekend",
+      "importance": 0.0
+    }
+  ]
+}
