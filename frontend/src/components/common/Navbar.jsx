@@ -14,6 +14,7 @@ import {
   FaTasks,
   FaStopwatch,
   FaTrophy,
+  FaBars,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
@@ -60,7 +61,7 @@ const getNotificationIcon = (type) => {
   }
 };
 
-const Navbar = () => {
+const Navbar = ({ onToggleMobileMenu = () => {} }) => {
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
   const auth = useAuth();
@@ -222,20 +223,31 @@ const Navbar = () => {
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors duration-200">
-      <div className="h-20 px-5 sm:px-8 flex items-center justify-between">
+      <div className="h-16 sm:h-20 px-3.5 sm:px-8 flex items-center justify-between gap-3">
         
-        {/* BRAND / TITLE */}
-        <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400 truncate tracking-tight">
-            Smart Developer Dashboard
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Track. Learn. Improve. Build.
-          </p>
+        {/* LEFT: MOBILE HAMBURGER & BRAND / TITLE */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <button
+            type="button"
+            onClick={onToggleMobileMenu}
+            className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            aria-label="Open mobile navigation menu"
+          >
+            <FaBars className="text-lg" />
+          </button>
+
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-2xl font-black text-blue-600 dark:text-blue-400 truncate tracking-tight">
+              Smart Developer Dashboard
+            </h1>
+            <p className="hidden sm:block text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+              Track. Learn. Improve. Build.
+            </p>
+          </div>
         </div>
 
         {/* RIGHT CONTROLS */}
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">
           
           {/* THEME SWITCH TOGGLE BUTTON */}
           <button
@@ -244,12 +256,12 @@ const Navbar = () => {
             onClick={toggleTheme}
             title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
             aria-label="Toggle theme"
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
           >
             {isDark ? (
-              <FaSun className="text-lg text-amber-400 hover:rotate-45 transition-transform duration-300" />
+              <FaSun className="text-base sm:text-lg text-amber-400 hover:rotate-45 transition-transform duration-300" />
             ) : (
-              <FaMoon className="text-lg text-indigo-600 hover:-rotate-12 transition-transform duration-300" />
+              <FaMoon className="text-base sm:text-lg text-indigo-600 hover:-rotate-12 transition-transform duration-300" />
             )}
           </button>
 
@@ -264,10 +276,10 @@ const Navbar = () => {
                   fetchNotifications();
                 }
               }}
-              className="relative w-10 h-10 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 transition cursor-pointer"
+              className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 transition cursor-pointer"
               aria-label="Notifications"
             >
-              <FaBell className="text-lg" />
+              <FaBell className="text-base sm:text-lg" />
               {unreadCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white dark:border-slate-900 animate-pulse">
                   {unreadCount > 9 ? "9+" : unreadCount}
@@ -277,7 +289,7 @@ const Navbar = () => {
 
             {/* NOTIFICATION PANEL */}
             {showNotifications && (
-              <div className="absolute right-0 top-12 w-[360px] max-w-[92vw] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden z-50 animate-fadeIn">
+              <div className="absolute right-0 top-12 w-[calc(100vw-1.5rem)] sm:w-[360px] max-w-[95vw] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden z-50 animate-fadeIn">
                 <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                   <div>
                     <h3 className="font-bold text-slate-900 dark:text-white text-sm">

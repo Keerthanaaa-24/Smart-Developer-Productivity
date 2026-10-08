@@ -11,14 +11,28 @@ const API = axios.create({
     (import.meta.env.DEV
       ? "http://127.0.0.1:8001"
       : "https://smart-developer-productivity.onrender.com"),
-  timeout: 20000, // 20s timeout for fast feedback and prompt cold-start recovery
+  timeout: 25000, // 25s timeout for cold-start recovery
   headers: {
     "Content-Type": "application/json",
   },
 });
 
 // =====================================================
-// ATTACH JWT AUTHORIZATION HEADER
+// IN-FLIGHT REQUEST DEDUPLICATION (GET ONLY)
+// =====================================================
+
+const inFlightRequests = new Map();
+
+const getRequestKey = (config) => {
+  const method = (config.method || "get").toLowerCase();
+  const url = config.url || "";
+  const params = config.params ? JSON.stringify(config.params) : "";
+  const token = localStorage.getItem("token") || localStorage.getItem("access_token") || "";
+  return `${method}:${url}:${params}:${token}`;
+};
+
+// =====================================================
+// ATTACH JWT AUTHORIZATION HEADER & DEDUPLICATE
 // =====================================================
 
 API.interceptors.request.use(
@@ -30,6 +44,16 @@ API.interceptors.request.use(
     if (token && token !== "null" && token !== "undefined") {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    const method = (config.method || "get").toLowerCase();
+    // In-flight deduplication for safe idempotent GET requests
+    if (method === "get" && !config.skipDeduplication) {
+      const key = getRequestKey(config);
+      if (inFlightRequests.has(key)) {
+        // Return existing in-flight promise wrapped in adapter
+        config.adapter = () => inFlightRequests.get(key);
+      }
     }
 
     return config;
@@ -45,12 +69,22 @@ API.interceptors.request.use(
 
 API.interceptors.response.use(
   (response) => {
+    const method = (response.config?.method || "get").toLowerCase();
+    if (method === "get") {
+      const key = getRequestKey(response.config || {});
+      inFlightRequests.delete(key);
+    }
     return response;
   },
   async (error) => {
     const config = error.config || {};
     const url = config.url || "";
     const method = (config.method || "get").toLowerCase();
+
+    if (method === "get") {
+      const key = getRequestKey(config);
+      inFlightRequests.delete(key);
+    }
 
     // 1. Session Expiration (401 Unauthorized on protected routes)
     if (error.response?.status === 401) {
@@ -93,7 +127,7 @@ API.interceptors.response.use(
     if (isSafeGet && !isOAuthFlow && isServerErrorOrTimeout && !config._retry) {
       config._retry = true;
       console.info(`[Render Cold-Start] Retrying safe GET request: ${url}`);
-      // Wait 1.5s before single retry
+      // Wait 1.5s before retry
       await new Promise((resolve) => setTimeout(resolve, 1500));
       return API(config);
     }
@@ -105,6 +139,8 @@ API.interceptors.response.use(
       error.friendlyMessage = "You do not have permission to perform this action.";
     } else if (error.response?.status === 404) {
       error.friendlyMessage = "The requested resource was not found.";
+    } else if (error.response?.status === 429) {
+      error.friendlyMessage = "Rate limit reached. Please slow down and try again shortly.";
     } else if (error.response?.data?.detail) {
       const detail = error.response.data.detail;
       error.friendlyMessage = typeof detail === "string" ? detail : "Request failed. Please try again.";

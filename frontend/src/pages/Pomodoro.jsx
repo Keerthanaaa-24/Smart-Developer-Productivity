@@ -28,6 +28,15 @@ const Pomodoro = () => {
 
   useEffect(() => {
     fetchPomodoroData();
+
+    const handleBackendWarmed = () => {
+      fetchPomodoroData();
+    };
+
+    window.addEventListener("backend-warmed", handleBackendWarmed);
+    return () => {
+      window.removeEventListener("backend-warmed", handleBackendWarmed);
+    };
   }, [fetchPomodoroData]);
 
   return (

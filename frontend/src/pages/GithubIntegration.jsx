@@ -28,6 +28,15 @@ const GithubIntegration = () => {
 
   useEffect(() => {
     loadGithubData();
+
+    const handleBackendWarmed = () => {
+      loadGithubData();
+    };
+
+    window.addEventListener("backend-warmed", handleBackendWarmed);
+    return () => {
+      window.removeEventListener("backend-warmed", handleBackendWarmed);
+    };
   }, []);
 
   const loadGithubData = async () => {

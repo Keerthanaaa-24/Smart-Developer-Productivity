@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   FaGithub,
@@ -12,6 +12,8 @@ import {
   FaGraduationCap,
   FaBrain,
   FaExclamationTriangle,
+  FaArrowRight,
+  FaLayerGroup,
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -34,6 +36,7 @@ import {
 import { getDashboardOverview } from "../api/dashboardApi";
 import ContributionHeatmap from "../components/analytics/ContributionHeatmap";
 import LanguageUsageChart from "../components/analytics/LanguageUsageChart";
+import { useTheme } from "../context/ThemeContext";
 
 const formatDuration = (seconds) => {
   if (!seconds || seconds <= 0) return "0m";
@@ -45,7 +48,7 @@ const formatDuration = (seconds) => {
 };
 
 const SkeletonCard = ({ className = "h-32" }) => (
-  <div className={`bg-slate-100 dark:bg-slate-800 animate-pulse rounded-2xl ${className}`} />
+  <div className={`bg-slate-200/80 dark:bg-slate-800/80 animate-pulse rounded-2xl ${className}`} />
 );
 
 const Custom30DayTooltip = ({ active, payload, label }) => {
@@ -63,95 +66,197 @@ const Custom30DayTooltip = ({ active, payload, label }) => {
   return null;
 };
 
+// Session cache helpers for instantaneous paint
+const getAnalyticsCacheKey = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    return user?.id ? `sdp_analytics_cache_${user.id}` : null;
+  } catch {
+    return null;
+  }
+};
+
+const getCachedAnalytics = () => {
+  try {
+    const key = getAnalyticsCacheKey();
+    if (!key) return null;
+    const raw = sessionStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const setCachedAnalytics = (data) => {
+  try {
+    const key = getAnalyticsCacheKey();
+    if (!key || !data) return;
+    sessionStorage.setItem(key, JSON.stringify(data));
+  } catch {
+    // Ignore storage quota
+  }
+};
+
 const Analytics = () => {
-  const [streak, setStreak] = useState(null);
-  const [githubStats, setGithubStats] = useState(null);
-  const [languagesRaw, setLanguagesRaw] = useState([]);
-  const [dailyContributions, setDailyContributions] = useState([]);
-  const [dashboardOverview, setDashboardOverview] = useState(null);
-  const [githubStatus, setGithubStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { isDark } = useTheme();
+  const cachedData = useRef(getCachedAnalytics());
+
+  const [streak, setStreak] = useState(() => cachedData.current?.streak || null);
+  const [streakLoading, setStreakLoading] = useState(!cachedData.current?.streak);
+  const [streakError, setStreakError] = useState("");
+
+  const [githubStatus, setGithubStatus] = useState(() => cachedData.current?.githubStatus || null);
+  const [githubStats, setGithubStats] = useState(() => cachedData.current?.githubStats || null);
+  const [statsLoading, setStatsLoading] = useState(!cachedData.current?.githubStats);
+  const [statsError, setStatsError] = useState("");
+
+  const [dailyContributions, setDailyContributions] = useState(() => cachedData.current?.dailyContributions || []);
+  const [contribLoading, setContribLoading] = useState(!cachedData.current?.dailyContributions);
+  const [contribError, setContribError] = useState("");
+
+  const [languagesRaw, setLanguagesRaw] = useState(() => cachedData.current?.languagesRaw || []);
+  const [langLoading, setLangLoading] = useState(!cachedData.current?.languagesRaw);
+
+  const [dashboardOverview, setDashboardOverview] = useState(() => cachedData.current?.dashboardOverview || null);
+  const [overviewLoading, setOverviewLoading] = useState(!cachedData.current?.dashboardOverview);
+
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
+  const [globalError, setGlobalError] = useState("");
   const [lastSyncTime, setLastSyncTime] = useState(null);
 
+  // Progressive telemetry loader
   const loadAnalytics = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) {
       setRefreshing(true);
-    } else {
-      setLoading(true);
     }
-    setError("");
+    setGlobalError("");
 
-    try {
-      if (isManualRefresh) {
-        try {
-          await API.post("/activity/sync");
-        } catch (syncErr) {
-          console.warn("Manual activity sync warning:", syncErr);
+    if (isManualRefresh) {
+      try {
+        await API.post("/activity/sync");
+      } catch (syncErr) {
+        console.warn("Manual activity sync notice:", syncErr.message);
+      }
+    }
+
+    // 1. Fetch Developer Streak
+    if (!streak || isManualRefresh) setStreakLoading(true);
+    API.get("/developer-activity/streak")
+      .then((res) => {
+        if (res.data) {
+          setStreak(res.data);
+          setStreakError("");
         }
-      }
+      })
+      .catch((err) => {
+        console.warn("Streak fetch warning:", err.message);
+        if (!streak) setStreakError("Unable to load streak telemetry.");
+      })
+      .finally(() => setStreakLoading(false));
 
-      // Concurrently fetch all telemetry endpoints
-      const [
-        streakRes,
-        statsRes,
-        langRes,
-        contribRes,
-        overviewRes,
-        ghStatusRes,
-      ] = await Promise.allSettled([
-        API.get("/developer-activity/streak"),
-        getGithubStatistics(),
-        getGithubLanguages(),
-        getGithubDailyContributions(),
-        getDashboardOverview(),
-        getGithubStatus(),
-      ]);
+    // 2. Fetch Dashboard Overview
+    if (!dashboardOverview || isManualRefresh) setOverviewLoading(true);
+    getDashboardOverview()
+      .then((data) => {
+        if (data) setDashboardOverview(data);
+      })
+      .catch((err) => {
+        console.warn("Overview fetch warning:", err.message);
+      })
+      .finally(() => setOverviewLoading(false));
 
-      if (streakRes.status === "fulfilled" && streakRes.value?.data) {
-        setStreak(streakRes.value.data);
-      }
+    // 3. Fetch GitHub Status and downstream GitHub telemetry
+    getGithubStatus()
+      .then(async (statusData) => {
+        setGithubStatus(statusData);
 
-      if (statsRes.status === "fulfilled" && statsRes.value) {
-        setGithubStats(statsRes.value);
-      }
+        if (!statusData?.connected) {
+          setStatsLoading(false);
+          setContribLoading(false);
+          setLangLoading(false);
+          setGithubStats(null);
+          setDailyContributions([]);
+          setLanguagesRaw([]);
+          return;
+        }
 
-      if (langRes.status === "fulfilled" && langRes.value) {
-        const items = langRes.value.languages || (Array.isArray(langRes.value) ? langRes.value : []);
-        setLanguagesRaw(items);
-      }
+        // Fetch GitHub Stats
+        if (!githubStats || isManualRefresh) setStatsLoading(true);
+        getGithubStatistics()
+          .then((stats) => {
+            if (stats) {
+              setGithubStats(stats);
+              setStatsError("");
+            }
+          })
+          .catch((err) => {
+            console.warn("GitHub stats fetch warning:", err.message);
+            if (!githubStats) setStatsError("Unable to load GitHub stats.");
+          })
+          .finally(() => setStatsLoading(false));
 
-      if (contribRes.status === "fulfilled" && contribRes.value) {
-        const days = contribRes.value.days || contribRes.value.contributions || [];
-        setDailyContributions(days);
-      }
+        // Fetch GitHub Daily Contributions
+        if (dailyContributions.length === 0 || isManualRefresh) setContribLoading(true);
+        getGithubDailyContributions()
+          .then((contrib) => {
+            if (contrib) {
+              const days = contrib.days || contrib.contributions || [];
+              setDailyContributions(days);
+              setContribError("");
+            }
+          })
+          .catch((err) => {
+            console.warn("GitHub contributions fetch warning:", err.message);
+            if (dailyContributions.length === 0) {
+              setContribError("Unable to load contribution calendar.");
+            }
+          })
+          .finally(() => setContribLoading(false));
 
-      if (overviewRes.status === "fulfilled" && overviewRes.value) {
-        setDashboardOverview(overviewRes.value);
-      }
+        // Fetch GitHub Languages
+        if (languagesRaw.length === 0 || isManualRefresh) setLangLoading(true);
+        getGithubLanguages()
+          .then((langData) => {
+            if (langData) {
+              const items = langData.languages || (Array.isArray(langData) ? langData : []);
+              setLanguagesRaw(items);
+            }
+          })
+          .catch((err) => {
+            console.warn("GitHub languages fetch warning:", err.message);
+          })
+          .finally(() => setLangLoading(false));
+      })
+      .catch((err) => {
+        console.warn("GitHub status check warning:", err.message);
+        setStatsLoading(false);
+        setContribLoading(false);
+        setLangLoading(false);
+      });
 
-      if (ghStatusRes.status === "fulfilled" && ghStatusRes.value) {
-        setGithubStatus(ghStatusRes.value);
-      }
+    setLastSyncTime(
+      new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
+    setRefreshing(false);
+  }, [streak, dashboardOverview, githubStats, dailyContributions.length, languagesRaw.length]);
 
-      setLastSyncTime(
-        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      );
-    } catch (err) {
-      console.error("Failed to load analytics telemetry:", err);
-      setError("Failed to fetch fresh telemetry data. Please retry.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  // Persist session cache on data updates
+  useEffect(() => {
+    setCachedAnalytics({
+      streak,
+      githubStatus,
+      githubStats,
+      dailyContributions,
+      languagesRaw,
+      dashboardOverview,
+    });
+  }, [streak, githubStatus, githubStats, dailyContributions, languagesRaw, dashboardOverview]);
 
   useEffect(() => {
     loadAnalytics();
 
     const handleBackendWarmed = () => {
-      loadAnalytics();
+      loadAnalytics(false);
     };
 
     window.addEventListener("backend-warmed", handleBackendWarmed);
@@ -210,6 +315,7 @@ const Analytics = () => {
   const commitCount = githubStats?.commits?.total ?? 0;
   const activeEventsCount = githubStats?.activity?.total ?? (githubStats?.activity?.recent_events?.length ?? 0);
   const ghUsername = githubStatus?.github?.username || githubStats?.user?.username || (githubStatus?.connected ? "connected-user" : null);
+  const isGithubConnected = Boolean(githubStatus?.connected);
 
   // Platforms model derived dynamically from /dashboard/overview with authentic integration states
   const platformsData = useMemo(() => {
@@ -284,10 +390,10 @@ const Analytics = () => {
                 </span>
               )}
             </div>
-            <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-1">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-1">
               Developer Growth & Performance Analytics
             </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
               Real-time telemetry, 365-day contribution calendar, language distribution, and multi-platform streak tracking.
             </p>
           </div>
@@ -295,7 +401,7 @@ const Analytics = () => {
           <button
             onClick={() => loadAnalytics(true)}
             disabled={refreshing}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-medium text-sm hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition shadow-xs cursor-pointer disabled:opacity-60"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-medium text-sm hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition shadow-xs cursor-pointer disabled:opacity-60 shrink-0"
           >
             <FaSyncAlt className={`text-blue-600 dark:text-blue-400 ${refreshing ? "animate-spin" : ""}`} />
             <span>{refreshing ? "Syncing Analytics..." : "Refresh Analytics"}</span>
@@ -303,11 +409,11 @@ const Analytics = () => {
         </div>
 
         {/* ERROR NOTIFICATION */}
-        {error && (
+        {globalError && (
           <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300 px-5 py-4 rounded-2xl flex items-center justify-between text-sm">
             <span className="flex items-center gap-2">
               <FaExclamationTriangle />
-              {error}
+              {globalError}
             </span>
             <button
               onClick={() => loadAnalytics(true)}
@@ -319,10 +425,10 @@ const Analytics = () => {
         )}
 
         {/* 1. DEVELOPER STREAK HIGHLIGHT HERO */}
-        {loading ? (
+        {streakLoading && !streak ? (
           <SkeletonCard className="h-56 bg-gradient-to-r from-orange-400/20 to-red-400/20" />
         ) : (
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-orange-500 via-amber-600 to-red-600 text-white p-7 sm:p-9 shadow-xl border border-orange-400/30">
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-orange-500 via-amber-600 to-red-600 text-white p-6 sm:p-9 shadow-xl border border-orange-400/30">
             <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
 
             <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
@@ -340,12 +446,12 @@ const Analytics = () => {
                   <span className="text-5xl sm:text-6xl font-black tracking-tight text-white drop-shadow-md">
                     {currentStreak}
                   </span>
-                  <span className="text-2xl font-bold text-orange-100">
+                  <span className="text-xl sm:text-2xl font-bold text-orange-100">
                     Consecutive Days Active
                   </span>
                 </div>
 
-                <p className="text-sm text-orange-100/90 max-w-xl leading-relaxed">
+                <p className="text-xs sm:text-sm text-orange-100/90 max-w-xl leading-relaxed">
                   Earned across active GitHub commits, task completions, and platform problem solving. 
                   {streak?.today_active ? " You have satisfied today's streak requirements! 🔥" : " Log an activity today to maintain your streak."}
                 </p>
@@ -388,18 +494,23 @@ const Analytics = () => {
         <ContributionHeatmap
           dailyContributions={dailyContributions}
           totalContributions={totalContributions}
+          loading={contribLoading}
+          error={contribError}
+          connected={isGithubConnected}
+          username={ghUsername}
+          onRetry={() => loadAnalytics(true)}
         />
 
         {/* 3. GITHUB OVERVIEW & PERFORMANCE METRICS */}
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs dark:shadow-xl p-6 sm:p-8 transition-colors duration-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-2xl shadow-md">
+              <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-2xl shadow-md shrink-0">
                 <FaGithub />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  GitHub Verified Performance
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
+                  <span>GitHub Verified Performance</span>
                   {ghUsername ? (
                     <a
                       href={`https://github.com/${ghUsername}`}
@@ -421,26 +532,49 @@ const Analytics = () => {
               </div>
             </div>
 
-            {ghUsername ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold">
+            {isGithubConnected ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold self-start sm:self-auto">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                 Connected & Synchronized
               </span>
             ) : (
               <Link
                 to="/settings?tab=connected"
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold transition"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold transition self-start sm:self-auto"
               >
                 Connect GitHub in Settings →
               </Link>
             )}
           </div>
 
-          {loading ? (
+          {statsLoading && !githubStats ? (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[1, 2, 3, 4].map((i) => (
                 <SkeletonCard key={i} className="h-28" />
               ))}
+            </div>
+          ) : !isGithubConnected ? (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 opacity-75">
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-5 border border-slate-200 dark:border-slate-700/60">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Repositories</span>
+                <p className="text-xl font-bold text-slate-400 mt-2">—</p>
+                <p className="text-xs text-slate-400 mt-1">Connect GitHub</p>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-5 border border-slate-200 dark:border-slate-700/60">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Commits</span>
+                <p className="text-xl font-bold text-slate-400 mt-2">—</p>
+                <p className="text-xs text-slate-400 mt-1">Connect GitHub</p>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-5 border border-slate-200 dark:border-slate-700/60">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Contributions</span>
+                <p className="text-xl font-bold text-slate-400 mt-2">—</p>
+                <p className="text-xs text-slate-400 mt-1">Connect GitHub</p>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-5 border border-slate-200 dark:border-slate-700/60">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Active Events</span>
+                <p className="text-xl font-bold text-slate-400 mt-2">—</p>
+                <p className="text-xs text-slate-400 mt-1">Connect GitHub</p>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -448,7 +582,7 @@ const Analytics = () => {
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                   Repositories
                 </span>
-                <p className="text-3xl font-extrabold text-slate-900 dark:text-white mt-2">
+                <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-2">
                   {repoCount}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Public & accessible repos</p>
@@ -458,7 +592,7 @@ const Analytics = () => {
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                   Total Commits
                 </span>
-                <p className="text-3xl font-extrabold text-blue-600 dark:text-blue-400 mt-2">
+                <p className="text-2xl sm:text-3xl font-extrabold text-blue-600 dark:text-blue-400 mt-2">
                   {commitCount}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Across verified branches</p>
@@ -468,7 +602,7 @@ const Analytics = () => {
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                   Total Contributions
                 </span>
-                <p className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-2">
+                <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-2">
                   {totalContributions}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Commits, PRs & Reviews</p>
@@ -478,7 +612,7 @@ const Analytics = () => {
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                   Active Events
                 </span>
-                <p className="text-3xl font-extrabold text-purple-600 dark:text-purple-400 mt-2">
+                <p className="text-2xl sm:text-3xl font-extrabold text-purple-600 dark:text-purple-400 mt-2">
                   {activeEventsCount}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Recent Push & PR actions</p>
@@ -494,7 +628,7 @@ const Analytics = () => {
             <div>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center text-lg">
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center text-lg shrink-0">
                     <FaCode />
                   </div>
                   <div>
@@ -507,12 +641,12 @@ const Analytics = () => {
                   </div>
                 </div>
 
-                <span className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 px-2.5 py-1 rounded-full border border-purple-200 dark:border-purple-800/60">
+                <span className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 px-2.5 py-1 rounded-full border border-purple-200 dark:border-purple-800/60 shrink-0">
                   {languagesList.length} Detected
                 </span>
               </div>
 
-              {loading ? (
+              {langLoading && languagesList.length === 0 ? (
                 <SkeletonCard className="h-64" />
               ) : languagesList.length > 0 ? (
                 <div className="space-y-6">
@@ -556,7 +690,7 @@ const Analytics = () => {
                 </div>
               ) : (
                 <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
-                  No repository language statistics detected.
+                  {isGithubConnected ? "No repository languages detected yet." : "Connect GitHub to detect repository languages."}
                 </div>
               )}
             </div>
@@ -574,7 +708,7 @@ const Analytics = () => {
             <div>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center text-lg">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center text-lg shrink-0">
                     <FaChartLine />
                   </div>
                   <div>
@@ -587,12 +721,12 @@ const Analytics = () => {
                   </div>
                 </div>
 
-                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-3 py-1 rounded-full border border-blue-100 dark:border-blue-900/60">
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-3 py-1 rounded-full border border-blue-100 dark:border-blue-900/60 shrink-0">
                   {total30DayContributions} Contributions
                 </span>
               </div>
 
-              {loading ? (
+              {contribLoading && recent30Days.length === 0 ? (
                 <SkeletonCard className="h-64" />
               ) : recent30Days.length > 0 ? (
                 <div className="h-[280px] w-full">
@@ -620,7 +754,7 @@ const Analytics = () => {
                 </div>
               ) : (
                 <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
-                  No 30-day activity data available.
+                  {isGithubConnected ? "No 30-day activity records available." : "Connect GitHub to view 30-day activity trend."}
                 </div>
               )}
             </div>
@@ -648,7 +782,7 @@ const Analytics = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20 p-5 flex flex-col justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base shrink-0">
                   <FaCode />
                 </div>
                 <div>
@@ -670,7 +804,7 @@ const Analytics = () => {
 
             <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 p-5 flex flex-col justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-base">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-base shrink-0">
                   <FaGraduationCap />
                 </div>
                 <div>
@@ -688,7 +822,7 @@ const Analytics = () => {
 
             <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 p-5 flex flex-col justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-base">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-base shrink-0">
                   <FaBrain />
                 </div>
                 <div>
@@ -706,7 +840,7 @@ const Analytics = () => {
 
             <div className="rounded-2xl border border-purple-200 dark:border-purple-900/50 bg-purple-50/50 dark:bg-purple-950/20 p-5 flex flex-col justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center text-base">
+                <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center text-base shrink-0">
                   <FaClock />
                 </div>
                 <div>
@@ -806,7 +940,7 @@ const Analytics = () => {
 
                   <div className="mt-4 pt-2.5 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                     <span className="truncate">{platform.details}</span>
-                    <span className="shrink-0 font-medium">
+                    <span className="shrink-0 font-medium ml-2">
                       {status === "Manual Tracking" ? "Manual" : isConnected ? "✓ Synced" : "Not Linked"}
                     </span>
                   </div>

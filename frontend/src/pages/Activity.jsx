@@ -212,6 +212,18 @@ const Activity = () => {
     fetchActivitiesList();
   }, [fetchActivitiesList]);
 
+  useEffect(() => {
+    const handleBackendWarmed = () => {
+      fetchSummaries();
+      fetchActivitiesList();
+    };
+
+    window.addEventListener("backend-warmed", handleBackendWarmed);
+    return () => {
+      window.removeEventListener("backend-warmed", handleBackendWarmed);
+    };
+  }, [fetchSummaries, fetchActivitiesList]);
+
   const handleSync = async () => {
     setSyncing(true);
     setToast(null);
