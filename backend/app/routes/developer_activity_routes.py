@@ -29,6 +29,11 @@ ALLOWED_PLATFORMS = {
     "freecodecamp",
     "nptel",
     "coursera",
+    "linkedin",
+    "naukri",
+    "vscode",
+    "pomodoro",
+    "tasks",
 }
 
 

@@ -11,6 +11,7 @@ import {
   deleteActivity,
   recordManualActivity,
   syncPlatformActivities,
+  exportActivityData,
 } from "../api/activityApi";
 import {
   FaBolt,
@@ -41,6 +42,8 @@ import {
   FaGraduationCap,
   FaCheck,
   FaArrowRight,
+  FaDownload,
+  FaShieldAlt,
 } from "react-icons/fa";
 
 const CATEGORY_COLORS = {
@@ -243,6 +246,46 @@ const Activity = () => {
       });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleExport = async (format = "json") => {
+    try {
+      setToast({ type: "warning", message: `Preparing ${format.toUpperCase()} telemetry export...` });
+      const exportData = await exportActivityData(format);
+
+      if (format === "csv") {
+        const url = window.URL.createObjectURL(new Blob([exportData]));
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", `developer_activity_${new Date().toISOString().split("T")[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } else {
+        const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+          JSON.stringify(exportData, null, 2)
+        )}`;
+        const downloadAnchor = document.createElement("a");
+        downloadAnchor.setAttribute("href", jsonString);
+        downloadAnchor.setAttribute(
+          "download",
+          `developer_activity_${new Date().toISOString().split("T")[0]}.json`
+        );
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+      }
+
+      setToast({
+        type: "success",
+        message: `Activity telemetry exported successfully (${format.toUpperCase()}).`,
+      });
+    } catch (err) {
+      setToast({
+        type: "error",
+        message: "Failed to export activity telemetry data.",
+      });
     }
   };
 
@@ -524,33 +567,52 @@ const Activity = () => {
             </div>
 
             {/* Quick Action Buttons */}
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
               <button
                 id="btn-sync-activity"
                 onClick={handleSync}
                 disabled={syncing}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-lg shadow-blue-500/25 active:scale-95 transition cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow-lg shadow-blue-500/25 active:scale-95 transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
                 <FaSync className={`text-xs ${syncing ? "animate-spin" : ""}`} />
-                <span>{syncing ? "Syncing Platforms..." : "Sync Activity"}</span>
+                <span>{syncing ? "Syncing..." : "Sync Activity"}</span>
               </button>
+
+              <button
+                id="btn-export-activity"
+                onClick={() => handleExport("json")}
+                className="bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow-xs active:scale-95 transition cursor-pointer flex items-center gap-1.5"
+                title="Export all activity telemetry as JSON"
+              >
+                <FaDownload className="text-xs" />
+                <span>Export</span>
+              </button>
+
+              <a
+                href="/settings?tab=trust_center"
+                className="bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow-xs active:scale-95 transition cursor-pointer flex items-center gap-1.5"
+                title="View Data Trust Center and integration health"
+              >
+                <FaShieldAlt className="text-xs text-emerald-400" />
+                <span>Trust Center</span>
+              </a>
 
               <button
                 id="btn-log-career-milestone"
                 onClick={handleOpenNewCareer}
-                className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md active:scale-95 transition cursor-pointer flex items-center gap-2"
+                className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow-md active:scale-95 transition cursor-pointer flex items-center gap-1.5"
               >
                 <FaBriefcase className="text-xs" />
-                <span>Log Career Milestone</span>
+                <span>Career</span>
               </button>
 
               <button
                 id="btn-log-activity"
                 onClick={() => setShowManualModal(true)}
-                className="bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs active:scale-95 transition cursor-pointer flex items-center gap-2"
+                className="bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow-xs active:scale-95 transition cursor-pointer flex items-center gap-1.5"
               >
                 <FaPlus className="text-xs" />
-                <span>Log Activity</span>
+                <span>Log</span>
               </button>
             </div>
           </div>

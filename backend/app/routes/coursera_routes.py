@@ -102,13 +102,15 @@ def coursera_status(
         user_cache.set(user_id, "platform_status:coursera", res, ttl=30)
         return res
 
+    profile_url = connection.profile_url or "https://www.coursera.org"
+
     res = {
         "connected": True,
         "username": connection.coursera_username,
-        "profile_url": connection.profile_url,
+        "profile_url": profile_url,
         "coursera": {
             "username": connection.coursera_username,
-            "profile_url": connection.profile_url,
+            "profile_url": profile_url,
             "courses_completed": connection.courses_completed,
             "certificates_count": connection.certificates_count,
             "courses_in_progress": connection.courses_in_progress,
@@ -141,9 +143,11 @@ def coursera_profile(
             detail="Coursera account is not connected",
         )
 
+    profile_url = connection.profile_url or "https://www.coursera.org"
+
     return {
         "username": connection.coursera_username,
-        "profile_url": connection.profile_url,
+        "profile_url": profile_url,
         "courses_completed": connection.courses_completed,
         "certificates_count": connection.certificates_count,
         "courses_in_progress": connection.courses_in_progress,

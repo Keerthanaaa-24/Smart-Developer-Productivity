@@ -7,6 +7,7 @@ import AppearanceSettings from "../settings/AppearanceSettings";
 import NotificationsSettings from "../settings/NotificationsSettings";
 import ProductivitySettings from "../settings/ProductivitySettings";
 import ConnectedAccounts from "../settings/ConnectedAccounts";
+import DataTrustCenter from "../settings/DataTrustCenter";
 import PrivacySettings from "../settings/PrivacySettings";
 import {
   FaUser,
@@ -16,6 +17,7 @@ import {
   FaStopwatch,
   FaLink,
   FaShieldAlt,
+  FaHeartbeat,
   FaCog,
 } from "react-icons/fa";
 
@@ -75,6 +77,12 @@ const Settings = () => {
       name: "Connected Accounts",
       icon: <FaLink className="text-sm" />,
       description: "GitHub, LeetCode, FCC, GFG, NPTEL, Coursera",
+    },
+    {
+      id: "trust_center",
+      name: "Data Trust Center",
+      icon: <FaHeartbeat className="text-sm" />,
+      description: "Integration health, telemetry lineage, and data export",
     },
     {
       id: "privacy",
@@ -176,6 +184,7 @@ const Settings = () => {
               {activeTab === "notifications" && <NotificationsSettings />}
               {activeTab === "productivity" && <ProductivitySettings />}
               {activeTab === "connected" && <ConnectedAccounts />}
+              {activeTab === "trust_center" && <DataTrustCenter />}
               {activeTab === "privacy" && <PrivacySettings />}
             </div>
           </main>

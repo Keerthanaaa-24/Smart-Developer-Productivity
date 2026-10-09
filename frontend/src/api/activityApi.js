@@ -124,3 +124,25 @@ export const deleteActivity = async (activityId) => {
   const response = await API.delete(`/activity/${activityId}`);
   return response.data;
 };
+
+export const syncSinglePlatformActivity = async (platformName) => {
+  const response = await API.post(`/activity/sync/${platformName}`);
+  return response.data;
+};
+
+export const getProviderRegistry = async () => {
+  const response = await API.get("/activity/providers");
+  return response.data;
+};
+
+export const getDataTrustCenter = async () => {
+  const response = await API.get("/activity/trust-center");
+  return response.data;
+};
+
+export const exportActivityData = async (format = "json") => {
+  const response = await API.get(`/activity/export?format=${format}`, {
+    responseType: format === "csv" ? "blob" : "json",
+  });
+  return response.data;
+};

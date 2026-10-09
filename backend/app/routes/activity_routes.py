@@ -268,3 +268,49 @@ async def sync_single_platform(
     current_user: User = Depends(get_current_user),
 ):
     return await platform_sync_service.sync_platform(db, current_user.id, platform_name)
+
+
+# =========================================================
+# DATA TRUST CENTER & PROVENANCE ENDPOINTS
+# =========================================================
+
+@router.get("/providers")
+def list_providers_registry():
+    """Returns the comprehensive Provider Capability Registry for all 8 platforms."""
+    from app.services.provider_registry import provider_registry
+    return {
+        "providers": provider_registry.get_all_providers()
+    }
+
+
+@router.get("/trust-center")
+def get_trust_center_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Returns the real-time Integration Health and Data Trust Provenance report for current user."""
+    from app.services.data_trust_service import get_data_trust_center_overview
+    return get_data_trust_center_overview(db, current_user.id)
+
+
+@router.get("/export")
+def export_user_activity(
+    format: str = Query(default="json", regex="^(json|csv)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Exports all verified and recorded developer activity records for the authenticated user."""
+    from fastapi.responses import Response
+    from app.services.data_trust_service import export_user_activity_telemetry
+
+    data = export_user_activity_telemetry(db, current_user.id, export_format=format)
+
+    if format == "csv":
+        filename = f"developer_activity_{current_user.username}_{date.today()}.csv"
+        return Response(
+            content=data,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    return data

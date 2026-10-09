@@ -1,5 +1,18 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import API from "../api/axios";
+import { syncSinglePlatformActivity } from "../api/activityApi";
+import {
+  FaCheckCircle,
+  FaTimesCircle,
+  FaExclamationTriangle,
+  FaSync,
+  FaExternalLinkAlt,
+  FaInfoCircle,
+  FaShieldAlt,
+  FaClock,
+  FaLink,
+  FaUnlink,
+} from "react-icons/fa";
 
 const ConnectedAccounts = () => {
   const [connections, setConnections] = useState({
@@ -25,6 +38,8 @@ const ConnectedAccounts = () => {
     naukri: false,
   });
   const [connecting, setConnecting] = useState("");
+  const [syncingProvider, setSyncingProvider] = useState("");
+  const [selectedCapabilityModal, setSelectedCapabilityModal] = useState(null);
   const inFlightRequests = useRef(new Set());
 
   const platforms = [
@@ -32,6 +47,7 @@ const ConnectedAccounts = () => {
       key: "github",
       name: "GitHub",
       short: "GH",
+      website: "https://github.com",
       description:
         "Repositories, commits, pull requests, issues and verified coding activity.",
       endpoint: "/github/status",
@@ -43,14 +59,18 @@ const ConnectedAccounts = () => {
       type: "oauth",
       syncMode: "AUTOMATIC API",
       syncBadge: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800",
-      capabilityNote: "Authenticated OAuth & Events API",
+      capabilityNote: "Authenticated OAuth 2.0 & Events API",
+      dataCategories: ["Repositories", "Commits", "Pull Requests", "Contribution Calendar"],
+      unsupported: ["Direct time tracking (discrete events)", "Private enterprise servers without tunnel"],
+      supportsSync: true,
     },
     {
       key: "leetcode",
       name: "LeetCode",
       short: "LC",
+      website: "https://leetcode.com",
       description:
-        "Problem solving, algorithm solves, and competitive programming progress.",
+        "Problem solving, algorithm solves, difficulty breakdown, and competitive programming progress.",
       endpoint: "/leetcode/status",
       connectEndpoint: "/leetcode/connect",
       disconnectEndpoint: "/leetcode/disconnect",
@@ -61,11 +81,15 @@ const ConnectedAccounts = () => {
       syncMode: "AUTOMATIC (PUBLIC)",
       syncBadge: "bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800",
       capabilityNote: "Public GraphQL Submissions & Solves",
+      dataCategories: ["Solved Algorithms", "Easy/Med/Hard Breakdown", "Contest Rating", "Recent Submissions"],
+      unsupported: ["Private contest solutions", "Solving time per question"],
+      supportsSync: true,
     },
     {
       key: "freecodecamp",
       name: "freeCodeCamp",
       short: "FCC",
+      website: "https://www.freecodecamp.org",
       description:
         "Curriculum milestones, certifications and web development progress.",
       endpoint: "/freecodecamp/status",
@@ -78,13 +102,17 @@ const ConnectedAccounts = () => {
       syncMode: "AUTOMATIC (PUBLIC)",
       syncBadge: "bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800",
       capabilityNote: "Public Profile API & Certifications",
+      dataCategories: ["Curriculum Points", "Verified Certifications", "Challenge Milestones"],
+      unsupported: ["Private mode profiles", "Article reading duration"],
+      supportsSync: true,
     },
     {
       key: "geeksforgeeks",
       name: "GeeksforGeeks",
       short: "GFG",
+      website: "https://www.geeksforgeeks.org",
       description:
-        "Programming challenges, coding scores, and DSA practice profile.",
+        "Programming challenges, coding scores, articles, and DSA practice profile.",
       endpoint: "/geeksforgeeks/status",
       connectEndpoint: "/geeksforgeeks/connect",
       disconnectEndpoint: "/geeksforgeeks/disconnect",
@@ -95,11 +123,15 @@ const ConnectedAccounts = () => {
       syncMode: "AUTOMATIC (PUBLIC)",
       syncBadge: "bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800",
       capabilityNote: "Public Profile Metrics & Scores",
+      dataCategories: ["Coding Score", "Problems Solved", "Published Articles", "Courses Completed"],
+      unsupported: ["Institutional private contest ranks", "Course video timestamps"],
+      supportsSync: true,
     },
     {
       key: "coursera",
       name: "Coursera",
       short: "CO",
+      website: "https://www.coursera.org",
       description:
         "Course completions and certificates. No open consumer event API available; manual course tracking supported.",
       endpoint: "/coursera/status",
@@ -112,11 +144,15 @@ const ConnectedAccounts = () => {
       syncMode: "MANUAL ONLY",
       syncBadge: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800",
       capabilityNote: "Manual Course & Certificate Logging",
+      dataCategories: ["Courses Completed", "Certificates Earned", "Courses in Progress"],
+      unsupported: ["Automatic consumer event API without enterprise LMS SSO", "Video playback tracking"],
+      supportsSync: false,
     },
     {
       key: "nptel",
       name: "NPTEL",
       short: "NPTEL",
+      website: "https://nptel.ac.in",
       description:
         "Academic courses and certification tracking. No public API without institutional SSO; manual tracking supported.",
       endpoint: "/nptel/status",
@@ -129,11 +165,15 @@ const ConnectedAccounts = () => {
       syncMode: "MANUAL ONLY",
       syncBadge: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800",
       capabilityNote: "Manual Course Progress Tracking",
+      dataCategories: ["Academic Courses", "Certificates", "Study Session Logs"],
+      unsupported: ["Automated assignment grading without SWAYAM institutional SSO"],
+      supportsSync: false,
     },
     {
       key: "linkedin",
       name: "LinkedIn",
       short: "IN",
+      website: "https://www.linkedin.com",
       description:
         "Professional identity and network profile. Open activity feed is restricted by LinkedIn; career milestones logged manually.",
       endpoint: "/linkedin/status",
@@ -146,11 +186,15 @@ const ConnectedAccounts = () => {
       syncMode: "PROFILE ACCESS ONLY",
       syncBadge: "bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
       capabilityNote: "Connected ≠ Automatically tracked (Manual Career Activity)",
+      dataCategories: ["Profile Identity", "Job Application Pipeline", "Interview Milestones"],
+      unsupported: ["Open activity feed reading (restricted by LinkedIn Developer policies)"],
+      supportsSync: false,
     },
     {
       key: "naukri",
       name: "Naukri",
       short: "NK",
+      website: "https://www.naukri.com",
       description:
         "Job search and recruiter tracking. No public jobseeker API available; applications & interviews tracked via Career Activity.",
       gradient: "from-amber-600 to-orange-500",
@@ -159,6 +203,9 @@ const ConnectedAccounts = () => {
       syncMode: "MANUAL ONLY",
       syncBadge: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800",
       capabilityNote: "Manual Applications & Interview Logging",
+      dataCategories: ["Job Applications", "Interview Rounds", "Recruiter Milestones"],
+      unsupported: ["Direct scraping of jobseeker credentials or automated application pulling"],
+      supportsSync: false,
     },
   ];
 
@@ -194,7 +241,7 @@ const ConnectedAccounts = () => {
       setConnections((prev) => ({ ...prev, [platform.key]: isConnected }));
       setAccountData((prev) => ({ ...prev, [platform.key]: extractedData }));
     } catch (err) {
-      console.warn(`Status check for ${platform.name} completed with non-connected fallback:`, err.message);
+      console.warn(`Status check for ${platform.name} completed:`, err.message);
       setConnections((prev) => ({ ...prev, [platform.key]: false }));
     } finally {
       inFlightRequests.current.delete(platform.key);
@@ -204,7 +251,6 @@ const ConnectedAccounts = () => {
 
   const checkAllConnections = useCallback(() => {
     const endpointsToFetch = platforms.filter((p) => p.endpoint);
-    // Fire all requests completely independently in parallel
     endpointsToFetch.forEach((platform) => {
       fetchSingleProvider(platform);
     });
@@ -282,8 +328,6 @@ const ConnectedAccounts = () => {
       if (error.response?.status === 401) {
         alert("Your session has expired. Please log in again to connect your GitHub account.");
         window.location.href = "/login";
-      } else if (error.code === "ECONNABORTED" || error.message?.includes("timeout")) {
-        alert("Connecting to server timed out while backend was waking up. Please try connecting again.");
       } else {
         alert(error.response?.data?.detail || error.message || "Unable to initiate GitHub connection. Please try again.");
       }
@@ -316,7 +360,6 @@ const ConnectedAccounts = () => {
         },
       });
 
-      // Refresh just this provider immediately
       await fetchSingleProvider(platform);
       alert(`${platform.name} connected successfully!`);
     } catch (error) {
@@ -349,7 +392,6 @@ const ConnectedAccounts = () => {
         await API.post(platform.disconnectEndpoint);
       }
 
-      // Refresh just this provider immediately
       await fetchSingleProvider(platform);
       alert(`${platform.name} disconnected successfully.`);
     } catch (error) {
@@ -359,6 +401,22 @@ const ConnectedAccounts = () => {
       );
     } finally {
       setConnecting("");
+    }
+  };
+
+  const handleSync = async (platformKey) => {
+    try {
+      setSyncingProvider(platformKey);
+      const res = await syncSinglePlatformActivity(platformKey);
+      alert(res.message || `${platformKey} synced successfully!`);
+      const targetPlatform = platforms.find((p) => p.key === platformKey);
+      if (targetPlatform) {
+        await fetchSingleProvider(targetPlatform);
+      }
+    } catch (err) {
+      alert(err.response?.data?.detail || `Failed to sync ${platformKey}`);
+    } finally {
+      setSyncingProvider("");
     }
   };
 
@@ -378,6 +436,21 @@ const ConnectedAccounts = () => {
       if (data[field]) return String(data[field]);
     }
     return String(data.username || data.login || "");
+  };
+
+  const getSafeDestinationUrl = (platform, username, storedUrl) => {
+    if (storedUrl && typeof storedUrl === "string" && storedUrl.startsWith("http")) {
+      return storedUrl;
+    }
+    if (username) {
+      const cleanUser = username.replace(/^@/, "").trim();
+      if (platform.key === "github") return `https://github.com/${cleanUser}`;
+      if (platform.key === "leetcode") return `https://leetcode.com/u/${cleanUser}/`;
+      if (platform.key === "geeksforgeeks") return `https://www.geeksforgeeks.org/user/${cleanUser}/`;
+      if (platform.key === "freecodecamp") return `https://www.freecodecamp.org/${cleanUser}`;
+      if (platform.key === "linkedin") return `https://www.linkedin.com/in/${cleanUser}/`;
+    }
+    return platform.website || "https://github.com";
   };
 
   const connectedCount = Object.values(connections).filter(Boolean).length;
@@ -406,14 +479,16 @@ const ConnectedAccounts = () => {
               </p>
             </div>
 
-            <button
-              onClick={checkAllConnections}
-              disabled={isAnyLoading}
-              className="self-start lg:self-auto px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white text-sm font-medium backdrop-blur-sm transition disabled:opacity-50 cursor-pointer flex items-center gap-2"
-            >
-              <span className={isAnyLoading ? "animate-spin" : ""}>↻</span>
-              <span>{isAnyLoading ? "Checking..." : "Refresh All"}</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={checkAllConnections}
+                disabled={isAnyLoading}
+                className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white text-sm font-medium backdrop-blur-sm transition disabled:opacity-50 cursor-pointer flex items-center gap-2"
+              >
+                <span className={isAnyLoading ? "animate-spin" : ""}>↻</span>
+                <span>{isAnyLoading ? "Checking..." : "Refresh Status"}</span>
+              </button>
+            </div>
           </div>
 
           {/* SUMMARY TILES */}
@@ -487,13 +562,15 @@ const ConnectedAccounts = () => {
             const isLoading = providerLoading[platform.key];
             const connected = connections[platform.key];
             const isConnecting = connecting === platform.key;
+            const isSyncing = syncingProvider === platform.key;
             const username = getUsername(platform);
             const data = accountData[platform.key];
+            const destinationUrl = getSafeDestinationUrl(platform, username, data?.profile_url);
 
             return (
               <div
                 key={platform.key}
-                className="group relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between"
+                className="group relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between"
               >
                 <div>
                   <div className={`h-1.5 bg-gradient-to-r ${platform.gradient}`} />
@@ -522,7 +599,7 @@ const ConnectedAccounts = () => {
                                   className={`w-2 h-2 rounded-full ${
                                     connected
                                       ? "bg-emerald-500"
-                                      : platform.type === "manual_info"
+                                      : platform.type === "manual_info" || platform.syncMode?.includes("MANUAL")
                                       ? "bg-amber-400"
                                       : "bg-slate-300 dark:bg-slate-600"
                                   }`}
@@ -531,14 +608,14 @@ const ConnectedAccounts = () => {
                                   className={`text-xs font-semibold ${
                                     connected
                                       ? "text-emerald-600 dark:text-emerald-400"
-                                      : platform.type === "manual_info"
+                                      : platform.type === "manual_info" || platform.syncMode?.includes("MANUAL")
                                       ? "text-amber-600 dark:text-amber-400"
                                       : "text-slate-400 dark:text-slate-500"
                                   }`}
                                 >
                                   {connected
                                     ? "Connected"
-                                    : platform.type === "manual_info"
+                                    : platform.type === "manual_info" || platform.syncMode?.includes("MANUAL")
                                     ? "Manual Tracking"
                                     : "Not connected"}
                                 </span>
@@ -555,60 +632,66 @@ const ConnectedAccounts = () => {
                       </span>
                     </div>
 
-                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-5 mt-4 min-h-[48px]">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-5 mt-4 min-h-[44px]">
                       {platform.description}
                     </p>
 
-                    <div className="mt-2 text-[11px] font-medium text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 rounded-xl p-2.5">
-                      <span>Capability: </span>
-                      <strong className="text-slate-700 dark:text-slate-300 font-semibold">{platform.capabilityNote}</strong>
+                    {/* DATA CATEGORIES BADGES */}
+                    <div className="flex flex-wrap gap-1 mt-3">
+                      {platform.dataCategories?.map((cat, idx) => (
+                        <span
+                          key={idx}
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60"
+                        >
+                          {cat}
+                        </span>
+                      ))}
                     </div>
 
-                    {/* CONNECTED ACCOUNT PROFILE DETAILS */}
-                    {connected && (
-                      <div className="mt-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 p-3">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-bold">
-                          Verified Profile
-                        </p>
-                        <div className="flex items-center justify-between gap-3 mt-1">
-                          <p className="font-semibold text-slate-800 dark:text-slate-200 text-xs truncate">
-                            {username ? `@${username.replace(/^@/, "")}` : "Account Connected"}
+                    {/* CONNECTED ACCOUNT PROFILE DETAILS & NAVIGATION */}
+                    <div className="mt-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 p-3.5 space-y-2">
+                      <div className="flex items-center justify-between gap-3 text-xs">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-bold">
+                            {connected ? "Verified Profile" : "Official Website"}
                           </p>
-                          {(() => {
-                            let profileUrl = data?.profile_url;
-                            if (!profileUrl && username) {
-                              const cleanUser = username.replace(/^@/, "").trim();
-                              if (platform.key === "github") profileUrl = `https://github.com/${cleanUser}`;
-                              else if (platform.key === "leetcode") profileUrl = `https://leetcode.com/u/${cleanUser}/`;
-                              else if (platform.key === "geeksforgeeks") profileUrl = `https://www.geeksforgeeks.org/user/${cleanUser}/`;
-                              else if (platform.key === "freecodecamp") profileUrl = `https://www.freecodecamp.org/${cleanUser}`;
-                              else if (platform.key === "linkedin") profileUrl = `https://www.linkedin.com/in/${cleanUser}/`;
-                            }
-
-                            if (profileUrl && typeof profileUrl === "string" && profileUrl.startsWith("http")) {
-                              return (
-                                <a
-                                  href={profileUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold whitespace-nowrap cursor-pointer"
-                                >
-                                  View Profile ↗
-                                </a>
-                              );
-                            }
-
-                            return (
-                              <span className="text-[11px] text-slate-400 dark:text-slate-500 italic">
-                                {platform.type === "manual_info" || platform.syncMode?.includes("MANUAL")
-                                  ? "Manual tracking"
-                                  : "Profile verified"}
-                              </span>
-                            );
-                          })()}
+                          <p className="font-semibold text-slate-800 dark:text-slate-200 truncate mt-0.5">
+                            {connected && username ? `@${username.replace(/^@/, "")}` : platform.name}
+                          </p>
                         </div>
+
+                        <a
+                          href={destinationUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1 rounded-xl bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-blue-600 dark:text-blue-400 hover:text-blue-700 font-semibold text-xs flex items-center gap-1 shadow-2xs transition cursor-pointer"
+                        >
+                          <FaExternalLinkAlt className="text-[9px]" />
+                          <span>{connected ? "View Profile" : "Official Site"} ↗</span>
+                        </a>
                       </div>
-                    )}
+
+                      <div className="pt-2 border-t border-slate-200/50 dark:border-slate-700/50 flex items-center justify-between text-[11px] text-slate-400">
+                        <button
+                          onClick={() => setSelectedCapabilityModal(platform)}
+                          className="text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-medium flex items-center gap-1 cursor-pointer"
+                        >
+                          <FaInfoCircle className="text-[10px]" />
+                          <span>View Capabilities</span>
+                        </button>
+
+                        {platform.supportsSync && connected && (
+                          <button
+                            onClick={() => handleSync(platform.key)}
+                            disabled={isSyncing}
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 font-semibold flex items-center gap-1 transition disabled:opacity-50 cursor-pointer"
+                          >
+                            <FaSync className={isSyncing ? "animate-spin text-[10px]" : "text-[10px]"} />
+                            <span>{isSyncing ? "Syncing..." : "Sync"}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -625,9 +708,10 @@ const ConnectedAccounts = () => {
                     <button
                       onClick={() => handleDisconnect(platform)}
                       disabled={isConnecting || isLoading}
-                      className="w-full py-2.5 rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900 font-semibold text-xs transition disabled:opacity-50 cursor-pointer"
+                      className="w-full py-2.5 rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900 font-semibold text-xs transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
                     >
-                      {isConnecting ? "Disconnecting..." : "Disconnect Account"}
+                      <FaUnlink className="text-[11px]" />
+                      <span>{isConnecting ? "Disconnecting..." : "Disconnect Account"}</span>
                     </button>
                   ) : (
                     <button
@@ -635,6 +719,7 @@ const ConnectedAccounts = () => {
                       disabled={isConnecting || isLoading}
                       className={`w-full py-2.5 rounded-xl bg-gradient-to-r ${platform.gradient} text-white font-semibold text-xs shadow-sm hover:shadow-md transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5`}
                     >
+                      <FaLink className="text-[11px]" />
                       <span>{isConnecting ? "Connecting..." : `Connect ${platform.name}`}</span>
                     </button>
                   )}
@@ -643,48 +728,84 @@ const ConnectedAccounts = () => {
             );
           })}
         </div>
+      </div>
 
-        {/* Companion Extension Hub */}
-        <div className="mt-10 bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md border border-indigo-800/50">
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                <span>🛡️ Browser Extension Companion</span>
-                <span>•</span>
-                <span>Privacy-First & Consent-First</span>
+      {/* CAPABILITY REGISTRY MODAL */}
+      {selectedCapabilityModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{selectedCapabilityModal.icon}</span>
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white">
+                    {selectedCapabilityModal.name} Integration
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Capability Specifications & Scope Details
+                  </p>
+                </div>
               </div>
-              <h3 className="text-xl font-black text-white">Browser Activity Extension</h3>
-              <p className="text-xs text-indigo-200/80 max-w-2xl leading-relaxed">
-                Automatically logs active time across 8 supported platforms with strict idle detection and zero scraping. Disabled by default until you grant consent in the extension popup.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <a
-                href="/activity"
-                className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition cursor-pointer"
+              <button
+                onClick={() => setSelectedCapabilityModal(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 flex items-center justify-center text-sm cursor-pointer"
               >
-                <span>View Activity Feed</span>
-              </a>
+                ✕
+              </button>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6 pt-6 border-t border-indigo-800/40 text-xs">
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5">
-              <p className="font-bold text-white mb-1">Strict Domain Whitelist</p>
-              <p className="text-[11px] text-indigo-200/70">Only tracks GitHub, LeetCode, Coursera, NPTEL, GeeksforGeeks, freeCodeCamp, LinkedIn & Naukri.</p>
+            <div className="space-y-4 text-xs">
+              <div>
+                <p className="font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Supported Telemetry Data:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedCapabilityModal.dataCategories?.map((item, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold"
+                    >
+                      ✓ {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Restrictions & Boundaries:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-400">
+                  {selectedCapabilityModal.unsupported?.map((item, idx) => (
+                    <li key={idx} className="text-amber-700 dark:text-amber-400">{item}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                <p className="font-bold text-slate-800 dark:text-slate-200">Official Website & Dashboard:</p>
+                <a
+                  href={selectedCapabilityModal.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 dark:text-blue-400 hover:underline break-all mt-0.5 inline-block font-semibold"
+                >
+                  {selectedCapabilityModal.website} ↗
+                </a>
+              </div>
             </div>
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5">
-              <p className="font-bold text-white mb-1">Zero Page Scraping</p>
-              <p className="text-[11px] text-indigo-200/70">Never reads passwords, cookies, auth tokens, form inputs, private messages, or DOM text.</p>
-            </div>
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5">
-              <p className="font-bold text-white mb-1">Offline Resilient Queue</p>
-              <p className="text-[11px] text-indigo-200/70">Buffers activity locally in Chrome storage and flushes securely to Unified Activity Engine upon connection.</p>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setSelectedCapabilityModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold text-xs cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -102,13 +102,15 @@ def nptel_status(
         user_cache.set(user_id, "platform_status:nptel", res, ttl=30)
         return res
 
+    profile_url = connection.profile_url or "https://nptel.ac.in"
+
     res = {
         "connected": True,
         "username": connection.nptel_username,
-        "profile_url": connection.profile_url,
+        "profile_url": profile_url,
         "nptel": {
             "username": connection.nptel_username,
-            "profile_url": connection.profile_url,
+            "profile_url": profile_url,
             "courses_completed": connection.courses_completed,
             "certificates_count": connection.certificates_count,
             "courses_enrolled": connection.courses_enrolled,
@@ -141,9 +143,11 @@ def nptel_profile(
             detail="NPTEL account is not connected",
         )
 
+    profile_url = connection.profile_url or "https://nptel.ac.in"
+
     return {
         "username": connection.nptel_username,
-        "profile_url": connection.profile_url,
+        "profile_url": profile_url,
         "courses_completed": connection.courses_completed,
         "certificates_count": connection.certificates_count,
         "courses_enrolled": connection.courses_enrolled,
