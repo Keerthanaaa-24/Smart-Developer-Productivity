@@ -22,13 +22,16 @@ from app.models.developer_activity import DeveloperActivity
 from app.models.pomodoro_session import PomodoroSession
 from app.models.user_settings import UserSettings
 from app.models.project import Project
-from app.models.login_history import LoginHistory
 from app.models.browser_time_session import BrowserTimeSession
+from app.models.productivity_forecast import ProductivityForecast
+from app.models.skill_gap_analysis import SkillGapAnalysis
+from app.models.personalized_recommendation import PersonalizedRecommendation
 from app.models.organization import (
     Organization,
     OrganizationMember,
     OrganizationRepository,
 )
+
 
 
 # =====================================================

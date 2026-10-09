@@ -20,6 +20,9 @@ from app.models.login_history import LoginHistory
 from app.models.notification import Notification
 from app.models.productivity_prediction import ProductivityPrediction
 from app.models.browser_time_session import BrowserTimeSession
+from app.models.productivity_forecast import ProductivityForecast
+from app.models.skill_gap_analysis import SkillGapAnalysis
+from app.models.personalized_recommendation import PersonalizedRecommendation
 
 __all__ = [
     "User",
@@ -42,5 +45,9 @@ __all__ = [
     "Notification",
     "ProductivityPrediction",
     "BrowserTimeSession",
+    "ProductivityForecast",
+    "SkillGapAnalysis",
+    "PersonalizedRecommendation",
 ]
+
 
