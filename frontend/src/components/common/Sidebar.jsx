@@ -9,6 +9,8 @@ import {
   FaCog,
   FaRocket,
   FaTimes,
+  FaUserTie,
+  FaChartLine,
 } from "react-icons/fa";
 
 const menuItems = [
@@ -41,6 +43,16 @@ const menuItems = [
     icon: <FaClock />,
     title: "Pomodoro",
     path: "/pomodoro",
+  },
+  {
+    icon: <FaUserTie />,
+    title: "Portfolio",
+    path: "/portfolio",
+  },
+  {
+    icon: <FaChartLine />,
+    title: "Career Impact",
+    path: "/career-impact",
   },
   {
     icon: <FaCog />,

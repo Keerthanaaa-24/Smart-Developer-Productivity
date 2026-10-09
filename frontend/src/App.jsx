@@ -26,6 +26,9 @@ const Pomodoro = lazy(() => import("./pages/Pomodoro"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Settings = lazy(() => import("./pages/Settings"));
 const GithubIntegration = lazy(() => import("./pages/GithubIntegration"));
+const Portfolio = lazy(() => import("./pages/Portfolio"));
+const PublicPortfolio = lazy(() => import("./pages/PublicPortfolio"));
+const CareerImpact = lazy(() => import("./pages/CareerImpact"));
 
 // Responsive route loading skeleton
 const PageLoadingFallback = () => (
@@ -55,6 +58,7 @@ const App = () => {
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/portfolio/:slug" element={<PublicPortfolio />} />
 
                 {/* =====================================================
                     APPLICATION ROUTES (PROTECTED)
@@ -136,6 +140,24 @@ const App = () => {
                   element={
                     <ProtectedRoute>
                       <GithubIntegration />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/portfolio"
+                  element={
+                    <ProtectedRoute>
+                      <Portfolio />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/career-impact"
+                  element={
+                    <ProtectedRoute>
+                      <CareerImpact />
                     </ProtectedRoute>
                   }
                 />

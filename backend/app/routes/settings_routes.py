@@ -215,3 +215,31 @@ def delete_account(
 ):
     result = delete_user_account(db, current_user, payload.confirmation_text)
     return result
+
+
+@router.post("/integrations/{provider}/sync")
+async def sync_single_integration(
+    provider: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Triggers on-demand telemetry synchronization for a specific connected provider.
+    """
+    from app.services.platform_sync_service import platform_sync_service
+    res = await platform_sync_service.sync_single_platform(db, current_user.id, provider)
+    return res
+
+
+@router.post("/integrations/sync-all")
+async def sync_all_integrations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Triggers concurrent synchronization across all connected provider accounts.
+    """
+    from app.services.platform_sync_service import platform_sync_service
+    res = await platform_sync_service.sync_all(db, current_user.id)
+    return res
+

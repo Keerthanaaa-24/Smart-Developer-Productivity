@@ -23,6 +23,7 @@ from app.models.browser_time_session import BrowserTimeSession
 from app.models.productivity_forecast import ProductivityForecast
 from app.models.skill_gap_analysis import SkillGapAnalysis
 from app.models.personalized_recommendation import PersonalizedRecommendation
+from app.models.portfolio_profile import PortfolioProfile
 
 __all__ = [
     "User",
@@ -48,6 +49,7 @@ __all__ = [
     "ProductivityForecast",
     "SkillGapAnalysis",
     "PersonalizedRecommendation",
+    "PortfolioProfile",
 ]
 
 

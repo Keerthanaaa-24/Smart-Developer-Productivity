@@ -61,6 +61,8 @@ from app.routes.project_routes import router as project_router
 from app.routes.organization_routes import router as organization_router
 from app.routes.notification_routes import router as notification_router
 from app.routes.ml_routes import router as ml_router
+from app.routes.portfolio_routes import router as portfolio_router
+from app.routes.career_impact_routes import router as career_impact_router
 
 
 
@@ -254,6 +256,14 @@ app.include_router(
 
 app.include_router(
     ml_router
+)
+
+app.include_router(
+    portfolio_router
+)
+
+app.include_router(
+    career_impact_router
 )
 
 

@@ -55,7 +55,7 @@ class CareerReadinessService:
 
         # Pillar 1: Code & Version Control Evidence (Weight: 25%)
         gh_connected = gh is not None and not getattr(gh, "token_expired", False)
-        repos_count = gh.public_repos if gh and gh.public_repos else len(projects)
+        repos_count = getattr(gh, "public_repos", None) or len(projects)
         commits_stored = sum(a.activity_count or 1 for a in activities if a.platform == "github")
         completed_projects = sum(1 for p in projects if p.status in ("completed", "Completed", "live"))
         total_projects = len(projects)
