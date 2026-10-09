@@ -252,7 +252,44 @@ def get_data_trust_center_overview(db: Session, user_id: int) -> Dict[str, Any]:
         "supported_actions": ["open_dashboard"],
     })
 
-    # 4. Overall Health Calculations
+    # 4. Browser Extension Telemetry Status
+    from app.models.browser_time_session import BrowserTimeSession
+    from app.models.user_settings import UserSettings
+    
+    settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+    recent_browser_session = (
+        db.query(BrowserTimeSession)
+        .filter(BrowserTimeSession.user_id == user_id)
+        .order_by(BrowserTimeSession.created_at.desc())
+        .first()
+    )
+    total_browser_sessions = (
+        db.query(BrowserTimeSession)
+        .filter(BrowserTimeSession.user_id == user_id)
+        .count()
+    )
+
+    ext_is_enabled = bool(getattr(settings, "browser_extension_enabled", True) and getattr(settings, "activity_tracking", True))
+    ext_last_sync_dt = recent_browser_session.created_at if recent_browser_session else None
+    
+    # Active if synced within the last 24 hours
+    is_extension_connected = ext_last_sync_dt is not None and (now - ext_last_sync_dt).total_seconds() < 86400
+
+    browser_extension_status = {
+        "installed_and_synced": recent_browser_session is not None,
+        "is_connected": is_extension_connected,
+        "status_label": "Active & Syncing" if is_extension_connected else ("Connected (Idle)" if recent_browser_session else "Not Connected"),
+        "tracking_enabled": ext_is_enabled,
+        "consent_given": ext_is_enabled,
+        "last_successful_sync": ext_last_sync_dt.isoformat() + "Z" if ext_last_sync_dt else None,
+        "freshness": _calculate_freshness(ext_last_sync_dt),
+        "total_sessions_recorded": total_browser_sessions,
+        "idle_threshold_seconds": getattr(settings, "idle_threshold_seconds", 60),
+        "capture_provenance": "Application-Recorded Data — Browser Extension",
+        "supported_domains_count": 9,
+    }
+
+    # 5. Overall Health Calculations
     connected_count = sum(1 for p in providers_health if p["connected"])
     total_providers = len(providers_health)
     health_percentage = int((connected_count / 4) * 100) if connected_count <= 4 else 100
@@ -269,6 +306,7 @@ def get_data_trust_center_overview(db: Session, user_id: int) -> Dict[str, Any]:
             "total_providers": total_providers,
             "total_verified_activities": total_activities,
         },
+        "browser_extension": browser_extension_status,
         "provenance_breakdown": {
             "total_records": total_activities,
             "counts": provenance_counts,
@@ -279,6 +317,7 @@ def get_data_trust_center_overview(db: Session, user_id: int) -> Dict[str, Any]:
         },
         "providers": providers_health,
     }
+
 
 
 def export_user_activity_telemetry(db: Session, user_id: int, export_format: str = "json") -> Dict[str, Any] | str:

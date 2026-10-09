@@ -19,6 +19,7 @@ from app.models.user_settings import UserSettings
 from app.models.login_history import LoginHistory
 from app.models.notification import Notification
 from app.models.productivity_prediction import ProductivityPrediction
+from app.models.browser_time_session import BrowserTimeSession
 
 __all__ = [
     "User",
@@ -40,5 +41,6 @@ __all__ = [
     "LoginHistory",
     "Notification",
     "ProductivityPrediction",
+    "BrowserTimeSession",
 ]
 

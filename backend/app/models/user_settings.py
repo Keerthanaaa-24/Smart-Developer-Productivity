@@ -55,5 +55,11 @@ class UserSettings(Base):
     analytics_sharing = Column(Boolean, default=True, nullable=False)
     activity_tracking = Column(Boolean, default=True, nullable=False)
 
+    # 6. Browser Extension & Time Tracking Preferences
+    browser_extension_enabled = Column(Boolean, default=True, nullable=False)
+    idle_threshold_seconds = Column(Integer, default=60, nullable=False)
+    auto_sync_interval_seconds = Column(Integer, default=60, nullable=False)
+
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+

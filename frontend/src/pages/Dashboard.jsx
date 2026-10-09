@@ -10,8 +10,10 @@ import StreakCard from "../components/dashboard/StreakCard";
 import CareerActivityCard from "../components/dashboard/CareerActivityCard";
 import AIInsights from "../components/dashboard/AIInsights";
 import RecentActivity from "../components/dashboard/RecentActivity";
+import PlatformTimeTrackingCard from "../components/dashboard/PlatformTimeTrackingCard";
 
 import { getDashboardOverview } from "../api/dashboardApi";
+
 
 const SkeletonBlock = ({ className = "h-32" }) => (
   <div className={`bg-slate-200/80 dark:bg-slate-900/60 border border-slate-300/60 dark:border-slate-800 animate-pulse rounded-3xl ${className}`} />
@@ -137,6 +139,10 @@ const Dashboard = () => {
             onRefresh={() => fetchOverview(true)}
           />
         )}
+
+        {/* STAGE 1.8: Real-Time Browser Activity & Platform Time Tracking */}
+        <PlatformTimeTrackingCard />
+
 
         {/* STAGE 2: Charts & Streak */}
         {loading && !overview ? (

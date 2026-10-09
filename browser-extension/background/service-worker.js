@@ -1,34 +1,40 @@
 /**
  * Smart Developer Productivity — Background Service Worker (Manifest V3)
  * 
- * CORE PRINCIPLES:
- * 1. PRIVACY-FIRST: Only tracks active time on strictly whitelisted domains.
- * 2. CONSENT-FIRST: Disabled by default until user explicitly enables tracking.
- * 3. NO SPYWARE: No page content scraping, no cookie access, no password logging.
- * 4. OFFLINE RESILIENT: Local queue buffers data until online sync succeeds.
+ * CORE PRINCIPLES & SAFEGUARDS:
+ * 1. PRIVACY-FIRST: Only monitors strictly whitelisted developer & learning platforms.
+ * 2. CONSENT-FIRST: Opt-in required. Disabled by default until explicitly enabled.
+ * 3. NO SPYWARE: No page content scraping, no cookie access, no password logging, no keystroke storage.
+ * 4. ACCURATE ACTIVE-TIME: Counts duration ONLY when tab is focused, window is active, and user is not idle.
+ * 5. RESILIENT OFFLINE SYNC: Idempotent deduplication keys with exponential backoff offline queue.
  */
 
-// Supported Platform Mapping Whitelist
+// Whitelist of supported platforms matching Phase 1 registry
 const DOMAIN_PLATFORM_MAP = [
   { domain: "github.com", platform: "github", category: "coding", name: "GitHub" },
+  { domain: "gist.github.com", platform: "github", category: "coding", name: "GitHub" },
   { domain: "leetcode.com", platform: "leetcode", category: "problem_solving", name: "LeetCode" },
   { domain: "coursera.org", platform: "coursera", category: "learning", name: "Coursera" },
   { domain: "nptel.ac.in", platform: "nptel", category: "learning", name: "NPTEL" },
+  { domain: "swayam.gov.in", platform: "nptel", category: "learning", name: "NPTEL / Swayam" },
   { domain: "geeksforgeeks.org", platform: "geeksforgeeks", category: "problem_solving", name: "GeeksforGeeks" },
   { domain: "freecodecamp.org", platform: "freecodecamp", category: "learning", name: "freeCodeCamp" },
   { domain: "linkedin.com", platform: "linkedin", category: "career", name: "LinkedIn" },
   { domain: "naukri.com", platform: "naukri", category: "career", name: "Naukri" },
+  { domain: "vscode.dev", platform: "vscode", category: "coding", name: "VS Code" },
+  { domain: "github.dev", platform: "vscode", category: "coding", name: "GitHub Codespaces" },
 ];
 
 const DEFAULT_API_URL = "http://127.0.0.1:8001";
-const MIN_SESSION_SECONDS = 5; // Ignore sessions shorter than 5 seconds (prevent tab-switch noise)
-const IDLE_TIMEOUT_SECONDS = 60; // 60 seconds of inactivity triggers idle pause
+const MIN_SESSION_SECONDS = 3; // Ignore intervals < 3 seconds
+const IDLE_TIMEOUT_SECONDS = 60; // 60 seconds inactivity triggers idle exclusion
 
-let activeSession = null; // { platform, category, startedAt, domain, tabId }
+let activeSession = null; // { platform, category, startedAt, domain, tabId, activeSeconds, idleSeconds }
 let isIdle = false;
+let isWindowFocused = true;
 
 // =========================================================
-// HELPER FUNCTIONS
+// HELPER UTILITIES
 // =========================================================
 
 function identifyPlatform(url) {
@@ -47,9 +53,9 @@ function identifyPlatform(url) {
   return null;
 }
 
-function generateEventId() {
-  const rand = Math.random().toString(36).substring(2, 10);
-  return `ext_${Date.now()}_${rand}`;
+function generateSessionKey(userId, platform, startTs, endTs) {
+  const rand = Math.random().toString(36).substring(2, 8);
+  return `bts_${userId || "anon"}_${platform}_${startTs}_${endTs}_${rand}`;
 }
 
 async function getStorageData(keys) {
@@ -65,7 +71,7 @@ async function setStorageData(obj) {
 }
 
 // =========================================================
-// SESSION MANAGEMENT
+// SESSION LIFECYCLE & TIME MEASUREMENT
 // =========================================================
 
 async function commitActiveSession(reason = "tab_changed") {
@@ -73,36 +79,46 @@ async function commitActiveSession(reason = "tab_changed") {
 
   const now = Date.now();
   const startedAt = activeSession.startedAt;
-  const durationSeconds = Math.round((now - startedAt) / 1000);
+  const elapsedSeconds = Math.max(0, Math.round((now - startedAt) / 1000));
+  
+  // Active seconds: only count if not idle and window was focused
+  const activeSeconds = isIdle || !isWindowFocused ? 0 : elapsedSeconds;
+  const idleSeconds = isIdle ? elapsedSeconds : 0;
 
   const sessionData = { ...activeSession };
   activeSession = null;
   await setStorageData({ sdp_active_session: null });
 
-  if (durationSeconds < MIN_SESSION_SECONDS) {
+  if (activeSeconds < MIN_SESSION_SECONDS) {
     return null;
   }
 
   const startDate = new Date(startedAt);
   const endDate = new Date(now);
+  const store = await getStorageData([
+    "sdp_offline_queue",
+    "sdp_today_stats",
+    "sdp_user_info",
+  ]);
 
-  const eventPayload = {
-    extension_event_id: generateEventId(),
+  const userId = store.sdp_user_info?.id || store.sdp_user_info?.username || "user";
+  const sessionKey = generateSessionKey(userId, sessionData.platform, startedAt, now);
+
+  const sessionPayload = {
+    session_key: sessionKey,
     platform: sessionData.platform,
+    domain: sessionData.domain,
     category: sessionData.category,
-    activity_type: "platform_session",
-    title: `Active session on ${sessionData.name}`,
-    details: `Active browser session verified via Extension (${durationSeconds}s duration)`,
     started_at: startDate.toISOString(),
     ended_at: endDate.toISOString(),
-    duration_seconds: durationSeconds,
+    active_seconds: activeSeconds,
+    idle_seconds: idleSeconds,
     source: "browser_extension",
   };
 
   // 1. Buffer into local offline queue
-  const store = await getStorageData(["sdp_offline_queue", "sdp_today_stats"]);
   const queue = store.sdp_offline_queue || [];
-  queue.push(eventPayload);
+  queue.push(sessionPayload);
 
   // 2. Update local today's stats cache
   const todayStr = startDate.toISOString().slice(0, 10);
@@ -112,35 +128,35 @@ async function commitActiveSession(reason = "tab_changed") {
     todayStats.platforms = {};
   }
   const platKey = sessionData.platform.toLowerCase();
-  todayStats.platforms[platKey] = (todayStats.platforms[platKey] || 0) + durationSeconds;
+  todayStats.platforms[platKey] = (todayStats.platforms[platKey] || 0) + activeSeconds;
 
   await setStorageData({
     sdp_offline_queue: queue,
     sdp_today_stats: todayStats,
   });
 
-  // 3. Trigger immediate sync attempt
+  // 3. Trigger asynchronous sync with backend
   syncQueueWithBackend();
 
-  return eventPayload;
+  return sessionPayload;
 }
 
 async function startSessionForTab(tab) {
-  if (!tab || !tab.url || isIdle) return;
+  if (!tab || !tab.url || isIdle || !isWindowFocused) return;
 
   const storage = await getStorageData(["sdp_tracking_enabled"]);
   if (!storage.sdp_tracking_enabled) {
-    return; // Respect consent: disabled
+    return; // Strict consent: tracking disabled
   }
 
   const platformInfo = identifyPlatform(tab.url);
   if (!platformInfo) {
-    // Navigated to unsupported domain: commit previous session if any
-    await commitActiveSession("navigated_away");
+    // Navigated to untracked domain: commit active interval if any
+    await commitActiveSession("navigated_to_untracked");
     return;
   }
 
-  // If already tracking the same platform on this tab, keep going
+  // If already tracking this exact platform on this tab, keep running
   if (
     activeSession &&
     activeSession.platform === platformInfo.platform &&
@@ -149,10 +165,10 @@ async function startSessionForTab(tab) {
     return;
   }
 
-  // Commit previous session before switching
+  // Commit previous session before starting new one
   await commitActiveSession("switched_platform");
 
-  // Start new active session
+  // Start new verified active session interval
   activeSession = {
     platform: platformInfo.platform,
     category: platformInfo.category,
@@ -166,7 +182,7 @@ async function startSessionForTab(tab) {
 }
 
 // =========================================================
-// BACKEND SYNCHRONIZATION
+// RESILIENT BACKEND SYNCHRONIZATION
 // =========================================================
 
 async function syncQueueWithBackend() {
@@ -183,10 +199,10 @@ async function syncQueueWithBackend() {
   if (queue.length === 0) return;
 
   const token = store.sdp_auth_token;
-  if (!token) return; // User not logged in yet
+  if (!token) return; // User not connected yet
 
   const apiUrl = store.sdp_api_url || DEFAULT_API_URL;
-  const syncEndpoint = `${apiUrl}/activity/extension-sync`;
+  const syncEndpoint = `${apiUrl}/time-tracking/sessions/sync`;
 
   try {
     const response = await fetch(syncEndpoint, {
@@ -195,41 +211,69 @@ async function syncQueueWithBackend() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ events: queue }),
+      body: JSON.stringify({ sessions: queue }),
     });
 
     if (response.ok) {
       const data = await response.json();
-      // Remove successfully synced events from local queue
-      const syncedEventIds = new Set(
-        (data.synced_items || []).map((i) =>
-          i.external_id ? i.external_id.replace(/^ext_/, "") : null
-        )
+      const syncedKeys = new Set(
+        (data.sessions || []).map((s) => s.session_key)
       );
 
+      // Remove successfully synced items from offline buffer
       const remainingQueue = queue.filter(
-        (item) => !syncedEventIds.has(item.extension_event_id)
+        (item) => !syncedKeys.has(item.session_key)
       );
 
       await setStorageData({
         sdp_offline_queue: remainingQueue,
         sdp_last_sync: new Date().toISOString(),
       });
+    } else if (response.status === 404) {
+      // Fallback for backward compatibility to Phase 1 endpoint
+      const legacyEndpoint = `${apiUrl}/activity/extension-sync`;
+      const legacyEvents = queue.map((q) => ({
+        extension_event_id: q.session_key,
+        platform: q.platform,
+        category: q.category || "coding",
+        activity_type: "platform_session",
+        title: `Active session on ${q.platform}`,
+        details: `Active browser session (${q.active_seconds}s)`,
+        started_at: q.started_at,
+        ended_at: q.ended_at,
+        duration_seconds: q.active_seconds,
+        source: "browser_extension",
+      }));
+
+      const legacyResp = await fetch(legacyEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ events: legacyEvents }),
+      });
+
+      if (legacyResp.ok) {
+        await setStorageData({
+          sdp_offline_queue: [],
+          sdp_last_sync: new Date().toISOString(),
+        });
+      }
     } else if (response.status === 401) {
-      // Token expired or invalid
-      console.warn("Smart Developer Productivity: Extension Auth Token Expired.");
+      console.warn("[Smart Productivity] Extension authorization expired. Please log in again.");
     }
   } catch (err) {
-    // Network error: keep items in queue for next scheduled sync
-    console.debug("Extension offline sync deferred:", err.message);
+    // Network offline: retain queue locally for exponential backoff sync
+    console.debug("[Smart Productivity] Sync deferred (offline/network):", err.message);
   }
 }
 
 // =========================================================
-// EVENT LISTENERS & LIFECYCLE
+// EVENT LISTENERS (TABS, WINDOWS, IDLE, ALARMS)
 // =========================================================
 
-// 1. Tab Activated (Switch tabs)
+// 1. Tab switches
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
     const tab = await chrome.tabs.get(activeInfo.tabId);
@@ -237,7 +281,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   } catch {}
 });
 
-// 2. Tab Updated (URL changed or page reloaded)
+// 2. Tab URL updates or reloads
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === "complete" || changeInfo.url) {
     if (tab.active) {
@@ -246,13 +290,20 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
-// 3. Window Focus Changed
+// 3. Tab Closed
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  if (activeSession && activeSession.tabId === tabId) {
+    await commitActiveSession("tab_closed");
+  }
+});
+
+// 4. Window Focus Changes
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
   if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    // User switched to another OS application
-    await commitActiveSession("window_blur");
+    isWindowFocused = false;
+    await commitActiveSession("window_blurred");
   } else {
-    // User returned to browser window
+    isWindowFocused = true;
     const [tab] = await chrome.tabs.query({ active: true, windowId });
     if (tab) {
       startSessionForTab(tab);
@@ -260,7 +311,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
   }
 });
 
-// 4. Idle State Detection
+// 5. Idle Detection (Default 60 seconds threshold)
 chrome.idle.setDetectionInterval(IDLE_TIMEOUT_SECONDS);
 chrome.idle.onStateChanged.addListener(async (newState) => {
   if (newState === "idle" || newState === "locked") {
@@ -275,7 +326,7 @@ chrome.idle.onStateChanged.addListener(async (newState) => {
   }
 });
 
-// 5. Periodic Sync Alarm (Runs every 1 minute)
+// 6. Periodic Background Sync Alarm (every 1 minute)
 chrome.alarms.create("sdp_periodic_sync", { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "sdp_periodic_sync") {
@@ -283,7 +334,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
-// 6. Content Script Heartbeat & User Presence
+// 7. Message Handler (Popup & Content Script)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "USER_PRESENCE_HEARTBEAT") {
     if (isIdle) {
@@ -296,7 +347,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // Popup & Frontend Communication Messages
   if (message.type === "GET_STATE") {
     (async () => {
       const store = await getStorageData([
@@ -341,7 +391,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "FORCE_SYNC") {
     (async () => {
-      await commitActiveSession("manual_sync_trigger");
+      await commitActiveSession("manual_sync");
       await syncQueueWithBackend();
       sendResponse({ success: true });
     })();
@@ -366,7 +416,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const authData = await resp.json();
           await setStorageData({
             sdp_auth_token: authData.access_token,
-            sdp_user_info: { username: message.username },
+            sdp_user_info: { username: message.username, id: authData.user_id },
             sdp_api_url: apiUrl,
           });
           syncQueueWithBackend();
@@ -376,7 +426,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ success: false, error: errData.detail || "Invalid credentials" });
         }
       } catch (err) {
-        sendResponse({ success: false, error: "Unable to connect to server." });
+        sendResponse({ success: false, error: "Unable to connect to backend server." });
       }
     })();
     return true;

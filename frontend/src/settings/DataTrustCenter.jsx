@@ -333,6 +333,94 @@ const DataTrustCenter = () => {
           </div>
         </section>
 
+        {/* BROWSER EXTENSION TELEMETRY & LOCAL SETUP GUIDE (PHASE 2) */}
+        {data?.browser_extension && (
+          <section className="bg-gradient-to-br from-indigo-50/50 via-white to-blue-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/20 border border-indigo-200/60 dark:border-indigo-900/40 rounded-3xl p-6 shadow-xs">
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-indigo-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-xl text-indigo-600 dark:text-indigo-400 font-bold">
+                  ⚡
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    Browser Extension Telemetry Engine
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
+                      Manifest V3
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Measures focused active platform time on whitelisted domains with automatic 60s idle exclusion.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-xs font-bold px-3 py-1 rounded-xl border flex items-center gap-1.5 ${
+                    data.browser_extension.is_connected
+                      ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                      : data.browser_extension.installed_and_synced
+                      ? "bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${data.browser_extension.is_connected ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+                  {data.browser_extension.status_label}
+                </span>
+              </div>
+            </div>
+
+            {/* Telemetry Status Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mt-5">
+              <div className="p-3.5 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <span className="text-[11px] font-medium text-slate-500 block">Consent State</span>
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-1 block">
+                  {data.browser_extension.consent_given ? "✓ Explicitly Enabled" : "○ Paused / Opted-out"}
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <span className="text-[11px] font-medium text-slate-500 block">Last Cloud Sync</span>
+                <span className="text-xs font-bold text-slate-900 dark:text-white mt-1 block">
+                  {data.browser_extension.freshness?.freshness_label || "Never"}
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <span className="text-[11px] font-medium text-slate-500 block">Total Synced Sessions</span>
+                <span className="text-xs font-bold text-slate-900 dark:text-white mt-1 block">
+                  {data.browser_extension.total_sessions_recorded || 0} intervals
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <span className="text-[11px] font-medium text-slate-500 block">Idle Filter Threshold</span>
+                <span className="text-xs font-bold text-amber-600 dark:text-amber-400 mt-1 block">
+                  {data.browser_extension.idle_threshold_seconds || 60}s inactivity
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Installation Guide Card */}
+            <div className="mt-5 p-4 rounded-2xl bg-slate-900 text-white text-xs space-y-2 border border-slate-800">
+              <div className="flex items-center justify-between">
+                <strong className="text-indigo-400 flex items-center gap-1.5 font-bold">
+                  📦 Local Extension Installation Guide (Chrome / Edge / Brave):
+                </strong>
+                <span className="text-[10px] text-slate-400">Folder: /browser-extension</span>
+              </div>
+              <ol className="list-decimal list-inside space-y-1 text-slate-300 leading-relaxed text-[11px]">
+                <li>Open Chrome or Chromium browser and navigate to <code className="text-indigo-300 bg-slate-800 px-1 py-0.5 rounded">chrome://extensions</code></li>
+                <li>Enable <strong>Developer Mode</strong> using the toggle in the top right corner.</li>
+                <li>Click <strong>Load unpacked</strong> and select the <code className="text-indigo-300 bg-slate-800 px-1 py-0.5 rounded">browser-extension/</code> directory from this project.</li>
+                <li>Open the extension popup, log in with your dashboard account, and click <strong>Enable Activity Tracking</strong>.</li>
+              </ol>
+            </div>
+          </section>
+        )}
+
+
         {/* PROVIDER HEALTH TABLE / GRID */}
         <section className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
           <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

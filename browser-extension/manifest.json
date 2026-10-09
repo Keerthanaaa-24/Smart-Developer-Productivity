@@ -1,39 +1,53 @@
 {
   "manifest_version": 3,
-  "name": "Smart Developer Productivity — Browser Telemetry",
-  "version": "1.0.0",
-  "description": "Privacy-first active session time tracking for GitHub, LeetCode, GeeksforGeeks, freeCodeCamp, and NPTEL.",
+  "name": "Smart Developer Productivity — Browser Time Tracking Engine",
+  "version": "2.0.0",
+  "description": "Privacy-first active website time tracking across GitHub, LeetCode, freeCodeCamp, GeeksforGeeks, Coursera, NPTEL, LinkedIn, and Naukri with automatic idle exclusion.",
   "permissions": [
     "storage",
     "idle",
-    "tabs"
+    "tabs",
+    "alarms"
   ],
   "host_permissions": [
     "http://127.0.0.1:8001/*",
     "http://localhost:8001/*",
+    "https://smart-developer-productivity.onrender.com/*",
     "https://github.com/*",
+    "https://gist.github.com/*",
     "https://leetcode.com/*",
-    "https://www.geeksforgeeks.org/*",
-    "https://www.freecodecamp.org/*",
-    "https://nptel.ac.in/*",
-    "https://archive.nptel.ac.in/*"
+    "https://*.geeksforgeeks.org/*",
+    "https://*.freecodecamp.org/*",
+    "https://*.coursera.org/*",
+    "https://*.nptel.ac.in/*",
+    "https://swayam.gov.in/*",
+    "https://*.linkedin.com/*",
+    "https://*.naukri.com/*",
+    "https://vscode.dev/*",
+    "https://github.dev/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background/service-worker.js"
   },
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "popup/popup.html",
     "default_title": "Smart Developer Productivity"
   },
   "content_scripts": [
     {
       "matches": [
         "https://github.com/*",
+        "https://gist.github.com/*",
         "https://leetcode.com/*",
-        "https://www.geeksforgeeks.org/*",
-        "https://www.freecodecamp.org/*",
-        "https://nptel.ac.in/*",
-        "https://archive.nptel.ac.in/*"
+        "https://*.geeksforgeeks.org/*",
+        "https://*.freecodecamp.org/*",
+        "https://*.coursera.org/*",
+        "https://*.nptel.ac.in/*",
+        "https://swayam.gov.in/*",
+        "https://*.linkedin.com/*",
+        "https://*.naukri.com/*",
+        "https://vscode.dev/*",
+        "https://github.dev/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"

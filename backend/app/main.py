@@ -23,6 +23,7 @@ from app.models.pomodoro_session import PomodoroSession
 from app.models.user_settings import UserSettings
 from app.models.project import Project
 from app.models.login_history import LoginHistory
+from app.models.browser_time_session import BrowserTimeSession
 from app.models.organization import (
     Organization,
     OrganizationMember,
@@ -50,12 +51,14 @@ from app.routes.activity_routes import router as activity_router
 from app.routes.developer_activity_routes import (
     router as developer_activity_router,
 )
+from app.routes.time_tracking_routes import router as time_tracking_router
 from app.routes.pomodoro_routes import router as pomodoro_router
 from app.routes.settings_routes import router as settings_router
 from app.routes.project_routes import router as project_router
 from app.routes.organization_routes import router as organization_router
 from app.routes.notification_routes import router as notification_router
 from app.routes.ml_routes import router as ml_router
+
 
 
 # =====================================================
@@ -220,6 +223,10 @@ app.include_router(
 )
 app.include_router(
     developer_activity_router
+)
+
+app.include_router(
+    time_tracking_router
 )
 
 app.include_router(
