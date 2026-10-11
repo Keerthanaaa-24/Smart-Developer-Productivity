@@ -3,34 +3,59 @@ import { FaBolt, FaCheckCircle, FaSyncAlt, FaRedo } from "react-icons/fa";
 import { API_BASE_URL } from "../../utils/constants";
 
 const BackendHealthBanner = () => {
-  const [status, setStatus] = useState("idle"); // 'idle' | 'waking' | 'ready' | 'error'
+  const [status, setStatus] = useState("idle"); // 'idle' | 'waking' | 'ready'
   const [elapsed, setElapsed] = useState(0);
   const [isManualChecking, setIsManualChecking] = useState(false);
   
+  const statusRef = useRef("idle");
   const pollTimerRef = useRef(null);
   const elapsedTimerRef = useRef(null);
   const retryDelayRef = useRef(2000); // Exponential backoff starts at 2s
+
+  const updateStatus = (newStatus) => {
+    statusRef.current = newStatus;
+    setStatus(newStatus);
+  };
 
   const checkHealth = useCallback(async () => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 6000);
-      const res = await fetch(`${API_BASE_URL}/health`, {
+      
+      // Probe readiness endpoint first (verifies both API and database)
+      let res = await fetch(`${API_BASE_URL}/health/ready`, {
         signal: controller.signal,
         headers: { Accept: "application/json" },
-      });
+      }).catch(() => null);
+
+      // Fallback to standard liveness if ready probe route not available
+      if (!res || !res.ok) {
+        res = await fetch(`${API_BASE_URL}/health`, {
+          signal: controller.signal,
+          headers: { Accept: "application/json" },
+        }).catch(() => null);
+      }
+
       clearTimeout(timeoutId);
 
-      if (res.ok) {
-        setStatus((prev) => (prev === "waking" ? "ready" : "idle"));
+      if (res && res.ok) {
         if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
         if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
         retryDelayRef.current = 2000;
-        window.dispatchEvent(new CustomEvent("backend-warmed"));
+
+        if (statusRef.current === "waking") {
+          updateStatus("ready");
+          window.dispatchEvent(new CustomEvent("backend-warmed"));
+          setTimeout(() => {
+            updateStatus("idle");
+          }, 3500);
+        } else {
+          updateStatus("idle");
+        }
         return true;
       }
     } catch {
-      // Backend still cold or network in-flight
+      // Backend still cold or in-flight
     }
     return false;
   }, []);
@@ -39,14 +64,9 @@ const BackendHealthBanner = () => {
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
 
     pollTimerRef.current = setTimeout(async () => {
+      if (statusRef.current !== "waking") return;
       const isOk = await checkHealth();
-      if (isOk) {
-        setStatus("ready");
-        setTimeout(() => {
-          setStatus("idle");
-        }, 3000);
-      } else {
-        // Exponential backoff: multiply delay up to max 10s
+      if (!isOk && statusRef.current === "waking") {
         retryDelayRef.current = Math.min(10000, Math.round(retryDelayRef.current * 1.4));
         scheduleNextPoll();
       }
@@ -54,7 +74,9 @@ const BackendHealthBanner = () => {
   }, [checkHealth]);
 
   const startWakingSequence = useCallback(() => {
-    setStatus("waking");
+    if (statusRef.current === "waking") return; // Avoid duplicate timers
+
+    updateStatus("waking");
     setElapsed(0);
     retryDelayRef.current = 2000;
 
@@ -70,11 +92,8 @@ const BackendHealthBanner = () => {
     setIsManualChecking(true);
     const isOk = await checkHealth();
     setIsManualChecking(false);
-    if (isOk) {
-      setStatus("ready");
-      setTimeout(() => {
-        setStatus("idle");
-      }, 3000);
+    if (!isOk && statusRef.current !== "waking") {
+      startWakingSequence();
     }
   };
 
@@ -88,7 +107,7 @@ const BackendHealthBanner = () => {
 
     // Listen for axios cold start triggers from failed API requests
     const handleColdStart = () => {
-      if (status !== "waking") {
+      if (statusRef.current !== "waking") {
         startWakingSequence();
       }
     };
@@ -100,7 +119,7 @@ const BackendHealthBanner = () => {
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
       window.removeEventListener("backend-cold-start", handleColdStart);
     };
-  }, [checkHealth, startWakingSequence, status]);
+  }, [checkHealth, startWakingSequence]);
 
   if (status === "idle") return null;
 

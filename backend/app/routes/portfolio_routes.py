@@ -20,7 +20,7 @@ def get_my_portfolio_settings(
     Returns the authenticated user's portfolio settings and configured profile.
     """
     portfolio = portfolio_service.get_or_create_portfolio(db, current_user.id)
-    preview = portfolio_service.get_public_portfolio(db, portfolio.custom_slug)
+    preview = portfolio_service.get_public_portfolio(db, portfolio.custom_slug, ignore_privacy=True)
     return {
         "settings": {
             "id": portfolio.id,

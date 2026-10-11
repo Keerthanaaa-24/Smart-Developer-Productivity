@@ -37,10 +37,10 @@ const PrimaryFiveMetrics = ({ metrics, todaySummary }) => {
   };
 
   const loginStreak = metrics?.login_streak || {
-    current_streak: 1,
-    longest_streak: 1,
-    today_logged_in: true,
-    total_login_days: 1,
+    current_streak: 0,
+    longest_streak: 0,
+    today_logged_in: false,
+    total_login_days: 0,
   };
 
   const productivity = metrics?.productivity || {

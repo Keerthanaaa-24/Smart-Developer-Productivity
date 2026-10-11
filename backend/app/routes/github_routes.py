@@ -7,18 +7,20 @@ from fastapi import (
     Depends,
     HTTPException,
     Request,
+    BackgroundTasks,
 )
 from fastapi.responses import RedirectResponse
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.core.oauth2 import get_current_user
 from app.core.encryption import encrypt_token, decrypt_token
 from app.core.cache import user_cache
 from app.models.user import User
 from app.models.github_connection import GitHubConnection
+from app.models.developer_activity import DeveloperActivity
 from app.services.activity_service import log_developer_activity
 from app.services.github_service import (
     get_github_profile,
@@ -1049,8 +1051,82 @@ async def github_streak(
 # DAILY CONTRIBUTIONS
 # =========================================================
 
+def _sync_github_calendar_background(user_id: int, github_username: str, days: list):
+    """
+    Asynchronously and efficiently syncs GitHub calendar contributions into developer_activity.
+    Uses bulk queries and single-transaction commit to prevent database pool exhaustion.
+    """
+    if not days:
+        return
+    today = datetime.utcnow().date()
+    valid_days = []
+    for day in days:
+        count = int(day.get("count", 0))
+        date_str = day.get("date")
+        if count > 0 and date_str:
+            try:
+                act_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                if act_date <= today:
+                    valid_days.append((act_date, date_str, count))
+            except Exception:
+                pass
+
+    if not valid_days:
+        return
+
+    db = SessionLocal()
+    try:
+        external_ids = [f"gh_cal_{d[1]}" for d in valid_days]
+        existing_rows = {
+            r.external_id: r
+            for r in db.query(DeveloperActivity)
+            .filter(
+                DeveloperActivity.user_id == user_id,
+                DeveloperActivity.platform == "github",
+                DeveloperActivity.external_id.in_(external_ids),
+            )
+            .all()
+        }
+
+        new_activities = []
+        for act_date, date_str, count in valid_days:
+            ext_id = f"gh_cal_{date_str}"
+            if ext_id in existing_rows:
+                existing = existing_rows[ext_id]
+                existing.activity_count = count
+                existing.message = f"{count} GitHub contribution{'s' if count != 1 else ''} recorded"
+            else:
+                new_activities.append(
+                    DeveloperActivity(
+                        user_id=user_id,
+                        platform="github",
+                        category="coding",
+                        activity_type="commit_contribution",
+                        title=f"GitHub Contribution: {count} contribution{'s' if count != 1 else ''}",
+                        message=f"{count} GitHub contribution{'s' if count != 1 else ''} recorded",
+                        details=f"Verified GitHub contributions on {date_str} for @{github_username}",
+                        duration_seconds=0,
+                        activity_date=act_date,
+                        started_at=datetime.combine(act_date, datetime.min.time()),
+                        source="github_api",
+                        external_id=ext_id,
+                        activity_count=count,
+                    )
+                )
+
+        if new_activities:
+            db.add_all(new_activities)
+        db.commit()
+        user_cache.invalidate_user(user_id)
+    except Exception as exc:
+        db.rollback()
+    finally:
+        db.close()
+
+
 @router.get("/daily-contributions")
 async def github_daily_contributions(
+    background_tasks: BackgroundTasks,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
@@ -1072,33 +1148,14 @@ async def github_daily_contributions(
             connection.github_username,
         )
 
-        today = datetime.utcnow().date()
-
-        # Idempotently sync verified contribution days into developer_activity
-        for day in contributions.get("days", []):
-            count = int(day.get("count", 0))
-            date_str = day.get("date")
-            if count > 0 and date_str:
-                try:
-                    act_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-                    if act_date <= today:
-                        record_unified_activity(
-                            db=db,
-                            user_id=user_id,
-                            platform="github",
-                            category="coding",
-                            activity_type="commit_contribution",
-                            title=f"GitHub Contribution: {count} contribution{'s' if count != 1 else ''}",
-                            message=f"{count} GitHub contribution{'s' if count != 1 else ''} recorded",
-                            details=f"Verified GitHub contributions on {date_str} for @{connection.github_username}",
-                            duration_seconds=0,
-                            activity_date=act_date,
-                            source="github_api",
-                            external_id=f"gh_cal_{date_str}",
-                            activity_count=count,
-                        )
-                except Exception:
-                    pass
+        days = contributions.get("days", [])
+        if days:
+            background_tasks.add_task(
+                _sync_github_calendar_background,
+                user_id,
+                connection.github_username,
+                days,
+            )
 
         return contributions
 

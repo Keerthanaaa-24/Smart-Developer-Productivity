@@ -126,10 +126,11 @@ class PortfolioService:
         db.refresh(portfolio)
         return portfolio
 
-    def get_public_portfolio(self, db: Session, slug: str) -> Dict[str, Any]:
+    def get_public_portfolio(self, db: Session, slug: str, ignore_privacy: bool = False) -> Dict[str, Any]:
         """
         Fetches the public-facing portfolio by slug.
         Strictly redacts sensitive fields (passwords, OAuth tokens, private repositories, email if not public).
+        When ignore_privacy is True (e.g., owner preview/resume export), returns data regardless of is_public_portfolio_enabled.
         """
         clean_slug = slug.strip().lower()
         portfolio = (
@@ -144,7 +145,13 @@ class PortfolioService:
             if user:
                 portfolio = db.query(PortfolioProfile).filter(PortfolioProfile.user_id == user.id).first()
 
-        if not portfolio or not portfolio.is_public_portfolio_enabled:
+        if not portfolio:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Public portfolio not found.",
+            )
+
+        if not portfolio.is_public_portfolio_enabled and not ignore_privacy:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Public portfolio not found or visibility is set to private.",
@@ -176,8 +183,8 @@ class PortfolioService:
                 gh_repos_count = db.query(Project).filter(Project.user_id == user_id, Project.github_repo_url.isnot(None)).count()
                 github_metrics = {
                     "username": gh.github_username,
-                    "public_repos": max(gh_repos_count, 1),
-                    "total_contributions": max(gh_acts_count, 12),
+                    "public_repos": gh_repos_count,
+                    "total_contributions": gh_acts_count,
                     "profile_url": getattr(gh, "profile_url", None) or f"https://github.com/{gh.github_username}",
                     "provenance": "verified_oauth2",
                 }
@@ -254,7 +261,7 @@ class PortfolioService:
                         "description": p.description or "Scalable application project.",
                         "tech_stack": [t.strip() for t in (p.tech_stack or "").split(",") if t.strip()],
                         "status": p.status,
-                        "github_repo_url": p.github_repo_url or (f"https://github.com/{user.username}/{self._sanitize_slug(p.name)}" if user and user.username else None),
+                        "github_repo_url": p.github_repo_url,
                         "provenance": "verified_repository" if p.github_repo_url else "user_project",
                     })
 
@@ -309,7 +316,7 @@ class PortfolioService:
     def export_resume_data(self, db: Session, user_id: int) -> Dict[str, Any]:
         """Provides a structured export schema ready for PDF resume generation."""
         portfolio = self.get_or_create_portfolio(db, user_id)
-        public_data = self.get_public_portfolio(db, portfolio.custom_slug)
+        public_data = self.get_public_portfolio(db, portfolio.custom_slug, ignore_privacy=True)
         user = db.query(User).filter(User.id == user_id).first()
 
         # Add explicit email for PDF export format

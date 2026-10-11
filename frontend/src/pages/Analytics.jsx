@@ -124,6 +124,17 @@ const Analytics = () => {
   const [globalError, setGlobalError] = useState("");
   const [lastSyncTime, setLastSyncTime] = useState(null);
 
+  const streakRef = useRef(streak);
+  streakRef.current = streak;
+  const overviewRef = useRef(dashboardOverview);
+  overviewRef.current = dashboardOverview;
+  const githubStatsRef = useRef(githubStats);
+  githubStatsRef.current = githubStats;
+  const contribLenRef = useRef(dailyContributions.length);
+  contribLenRef.current = dailyContributions.length;
+  const langLenRef = useRef(languagesRaw.length);
+  langLenRef.current = languagesRaw.length;
+
   // Progressive telemetry loader
   const loadAnalytics = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) {
@@ -140,7 +151,7 @@ const Analytics = () => {
     }
 
     // 1. Fetch Developer Streak
-    if (!streak || isManualRefresh) setStreakLoading(true);
+    if (!streakRef.current || isManualRefresh) setStreakLoading(true);
     API.get("/developer-activity/streak")
       .then((res) => {
         if (res.data) {
@@ -150,12 +161,12 @@ const Analytics = () => {
       })
       .catch((err) => {
         console.warn("Streak fetch warning:", err.message);
-        if (!streak) setStreakError("Unable to load streak telemetry.");
+        if (!streakRef.current) setStreakError("Unable to load streak telemetry.");
       })
       .finally(() => setStreakLoading(false));
 
     // 2. Fetch Dashboard Overview
-    if (!dashboardOverview || isManualRefresh) setOverviewLoading(true);
+    if (!overviewRef.current || isManualRefresh) setOverviewLoading(true);
     getDashboardOverview()
       .then((data) => {
         if (data) setDashboardOverview(data);
@@ -181,7 +192,7 @@ const Analytics = () => {
         }
 
         // Fetch GitHub Stats
-        if (!githubStats || isManualRefresh) setStatsLoading(true);
+        if (!githubStatsRef.current || isManualRefresh) setStatsLoading(true);
         getGithubStatistics()
           .then((stats) => {
             if (stats) {
@@ -191,12 +202,12 @@ const Analytics = () => {
           })
           .catch((err) => {
             console.warn("GitHub stats fetch warning:", err.message);
-            if (!githubStats) setStatsError("Unable to load GitHub stats.");
+            if (!githubStatsRef.current) setStatsError("Unable to load GitHub stats.");
           })
           .finally(() => setStatsLoading(false));
 
         // Fetch GitHub Daily Contributions
-        if (dailyContributions.length === 0 || isManualRefresh) setContribLoading(true);
+        if (contribLenRef.current === 0 || isManualRefresh) setContribLoading(true);
         getGithubDailyContributions()
           .then((contrib) => {
             if (contrib) {
@@ -207,14 +218,14 @@ const Analytics = () => {
           })
           .catch((err) => {
             console.warn("GitHub contributions fetch warning:", err.message);
-            if (dailyContributions.length === 0) {
+            if (contribLenRef.current === 0) {
               setContribError("Unable to load contribution calendar.");
             }
           })
           .finally(() => setContribLoading(false));
 
         // Fetch GitHub Languages
-        if (languagesRaw.length === 0 || isManualRefresh) setLangLoading(true);
+        if (langLenRef.current === 0 || isManualRefresh) setLangLoading(true);
         getGithubLanguages()
           .then((langData) => {
             if (langData) {
@@ -238,7 +249,7 @@ const Analytics = () => {
       new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     );
     setRefreshing(false);
-  }, [streak, dashboardOverview, githubStats, dailyContributions.length, languagesRaw.length]);
+  }, []);
 
   // Persist session cache on data updates
   useEffect(() => {

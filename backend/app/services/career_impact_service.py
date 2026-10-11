@@ -101,7 +101,7 @@ class CareerImpactService:
         completed_tasks = [t for t in all_tasks if (t.status or "").lower() == "completed"]
         completed_30d = [
             t for t in completed_tasks
-            if getattr(t, "due_date", None) and getattr(t, "due_date") >= thirty_days_ago.date()
+            if (not getattr(t, "due_date", None)) or getattr(t, "due_date") >= thirty_days_ago.date()
         ]
 
         task_completion_rate = (
@@ -195,17 +195,25 @@ class CareerImpactService:
                 },
             ]
 
-        # Data Coverage & Integrity Note
-        observation_days_count = len(set(
+        # Data Coverage & Integrity: compute genuine active observation days across all telemetry
+        activity_days_30d = set(
+            a.activity_date.strftime("%Y-%m-%d") for a in activities_90d
+            if a.activity_date and a.activity_date >= thirty_days_ago.date()
+        )
+        pomodoro_days_30d = set(
             p.started_at.strftime("%Y-%m-%d") for p in curr_pomodoros if p.started_at
-        ))
+        )
+        browser_days_30d = set(
+            b.started_at.strftime("%Y-%m-%d") for b in curr_browser_sessions if b.started_at
+        )
+        observation_days_count = len(activity_days_30d | pomodoro_days_30d | browser_days_30d)
 
         return {
             "period": {
                 "start_date": thirty_days_ago.strftime("%Y-%m-%d"),
                 "end_date": now.strftime("%Y-%m-%d"),
                 "coverage_days": 30,
-                "active_observation_days": max(observation_days_count, 14),
+                "active_observation_days": observation_days_count,
             },
             "focus_metrics": {
                 "total_focus_hours_30d": total_focus_hours_30d,

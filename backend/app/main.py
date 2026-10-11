@@ -1,7 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.database import Base, engine
+from app.core.database import Base, engine, verify_database_connection
 
 # =====================================================
 # IMPORT MODELS
@@ -271,7 +271,31 @@ def home():
 
 @app.get("/health")
 def health_check():
+    """Fast liveness probe for Render container orchestrator."""
     return {
         "status": "healthy",
+        "service": "smart-developer-productivity-api",
+    }
+
+
+@app.get("/health/ready")
+@app.get("/ready")
+def readiness_check(response: Response):
+    """
+    Deep readiness probe verifying database connectivity without leaking credentials.
+    Returns 503 if database connection is cold, sleeping, or unreachable.
+    """
+    is_db_ready = verify_database_connection()
+    if not is_db_ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {
+            "status": "unavailable",
+            "database": "disconnected",
+            "service": "smart-developer-productivity-api",
+            "message": "Database connectivity check failed or waiting on cold start.",
+        }
+    return {
+        "status": "ready",
+        "database": "connected",
         "service": "smart-developer-productivity-api",
     }

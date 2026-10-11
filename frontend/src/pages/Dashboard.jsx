@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import MainLayout from "../layouts/MainLayout";
 import API from "../api/axios";
 
@@ -47,11 +47,13 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(!overview);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const overviewRef = useRef(overview);
+  overviewRef.current = overview;
 
   const fetchOverview = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
-    } else if (!overview) {
+    } else if (!overviewRef.current) {
       setLoading(true);
     }
     setError("");
@@ -69,14 +71,14 @@ const Dashboard = () => {
       setCachedUserOverview(data);
     } catch (err) {
       console.error("Dashboard overview error:", err);
-      if (!overview) {
+      if (!overviewRef.current) {
         setError(err.friendlyMessage || "Unable to load live dashboard telemetry. Please check your connection.");
       }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [overview]);
+  }, []);
 
   useEffect(() => {
     fetchOverview();
