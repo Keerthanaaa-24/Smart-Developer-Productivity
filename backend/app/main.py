@@ -164,19 +164,8 @@ app.add_middleware(
 )
 
 
-# =====================================================
-# CREATE DATABASE TABLES
-# =====================================================
-
-try:
-    Base.metadata.create_all(bind=engine)
-except Exception as ddl_err:
-    import logging
-    safe_db = engine.url.render_as_string(hide_password=True)
-    logging.getLogger("uvicorn.error").error(
-        f"Database schema initialization failed for {safe_db}: {ddl_err}"
-    )
-    raise
+# Database tables are created/verified inside the lifespan event handler
+# to prevent blocking Uvicorn port binding on cold start.
 
 
 # =====================================================

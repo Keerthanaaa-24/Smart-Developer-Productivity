@@ -105,24 +105,40 @@ API.interceptors.response.use(
           window.location.href = "/login?expired=1";
         }
       }
-      error.friendlyMessage = "Session expired. Please log in again.";
+      const rawDetail = error.response?.data?.detail;
+      error.friendlyMessage = isAuthRequest
+        ? (typeof rawDetail === "string" ? rawDetail : "Invalid username or password. Please check your credentials.")
+        : "Session expired. Please log in again.";
+      error.message = error.friendlyMessage;
       return Promise.reject(error);
     }
 
-    // 2. Determine if safe for single cold-start retry
-    // Only safe idempotent GET requests, never OAuth or Auth mutations
-    const isSafeGet = method === "get";
-    const isOAuthFlow = url.includes("/oauth") || url.includes("/github/login") || url.includes("/github/callback");
-    const isServerErrorOrTimeout =
-      !error.response ||
+    // 2. Cold-start & timeout detection
+    const isTimeout =
       error.code === "ECONNABORTED" ||
-      error.message?.includes("timeout") ||
-      error.message?.includes("Network Error") ||
-      [502, 503, 504].includes(error.response?.status);
+      (typeof error.message === "string" && error.message.toLowerCase().includes("timeout"));
+    const isNetworkError =
+      !error.response ||
+      (typeof error.message === "string" && error.message.includes("Network Error"));
+    const isColdStartStatus = [502, 503, 504].includes(error.response?.status);
+    const isServerErrorOrTimeout = isTimeout || isNetworkError || isColdStartStatus;
 
     if (isServerErrorOrTimeout && typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("backend-cold-start"));
+      window.dispatchEvent(
+        new CustomEvent("backend-cold-start", {
+          detail: { url, method, isTimeout, status: error.response?.status },
+        })
+      );
     }
+
+    // Determine if safe for single cold-start retry
+    // ONLY safe idempotent GET requests are retried automatically.
+    // POST, PUT, DELETE, and auth/oauth mutations are NEVER blindly retried.
+    const isSafeGet = method === "get";
+    const isOAuthFlow =
+      url.includes("/oauth") ||
+      url.includes("/github/login") ||
+      url.includes("/github/callback");
 
     if (isSafeGet && !isOAuthFlow && isServerErrorOrTimeout && !config._retry) {
       config._retry = true;
@@ -133,20 +149,41 @@ API.interceptors.response.use(
     }
 
     // 3. User-Friendly Error Classification
-    if (isServerErrorOrTimeout) {
-      error.friendlyMessage = "Backend service is waking up. Please retry in a moment.";
+    if (isTimeout) {
+      error.friendlyMessage =
+        "The server is taking longer than expected to respond (backend may be waking up from an idle state). Please try again in a moment.";
+    } else if (isNetworkError) {
+      error.friendlyMessage =
+        "Unable to reach the backend service. It may be waking up or your network connection is offline.";
+    } else if (isColdStartStatus) {
+      error.friendlyMessage =
+        "Backend service is waking up from idle state. Please wait a moment and try again.";
     } else if (error.response?.status === 403) {
       error.friendlyMessage = "You do not have permission to perform this action.";
     } else if (error.response?.status === 404) {
       error.friendlyMessage = "The requested resource was not found.";
+    } else if (error.response?.status === 422) {
+      error.friendlyMessage = "Invalid request format or missing required fields.";
     } else if (error.response?.status === 429) {
       error.friendlyMessage = "Rate limit reached. Please slow down and try again shortly.";
+    } else if (error.response?.status === 500) {
+      error.friendlyMessage = "An internal server error occurred. Please try again in a few moments.";
     } else if (error.response?.data?.detail) {
       const detail = error.response.data.detail;
-      error.friendlyMessage = typeof detail === "string" ? detail : "Request failed. Please try again.";
+      if (typeof detail === "string") {
+        error.friendlyMessage = detail;
+      } else if (Array.isArray(detail)) {
+        error.friendlyMessage = detail.map((d) => d.msg || JSON.stringify(d)).join(", ");
+      } else {
+        error.friendlyMessage = "Request failed. Please try again.";
+      }
     } else {
-      error.friendlyMessage = "Unable to reach server. Please check your connection.";
+      error.friendlyMessage = "Unable to complete request. Please check your connection.";
     }
+
+    // Safeguard error.message so legacy callers that read error.message
+    // never show raw technical timeouts like 'timeout of 25000ms exceeded'
+    error.message = error.friendlyMessage;
 
     return Promise.reject(error);
   }

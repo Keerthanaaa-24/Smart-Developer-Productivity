@@ -64,17 +64,21 @@ const Register = () => {
       }, 1500);
     } catch (error) {
       console.error("Registration failed:", error);
-      let detail = error.response?.data?.detail;
-
-      if (Array.isArray(detail)) {
-        detail = detail.map((err) => err.msg || JSON.stringify(err)).join(", ");
-      } else if (typeof detail === "object" && detail !== null) {
-        detail = detail.msg || JSON.stringify(detail);
-      } else if (!detail) {
-        detail = error.message || "Registration failed. Please check your details and try again.";
+      if (error.friendlyMessage) {
+        setErrorMsg(error.friendlyMessage);
+      } else {
+        let detail = error.response?.data?.detail;
+        if (Array.isArray(detail)) {
+          detail = detail.map((err) => err.msg || JSON.stringify(err)).join(", ");
+        } else if (typeof detail === "object" && detail !== null) {
+          detail = detail.msg || JSON.stringify(detail);
+        } else if (!detail) {
+          detail = error.message && !error.message.includes("timeout")
+            ? error.message
+            : "Registration request timed out. Please check your connection and try again.";
+        }
+        setErrorMsg(detail);
       }
-
-      setErrorMsg(detail);
     } finally {
       setLoading(false);
     }

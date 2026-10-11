@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import AuthLayout from "../layouts/AuthLayout";
-import { loginUser } from "../api/authApi";
+import { loginUser, checkBackendHealth } from "../api/authApi";
 import useAuth from "../hooks/useAuth";
 
 const Login = () => {
@@ -11,14 +11,44 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [isTimeoutError, setIsTimeoutError] = useState(false);
+  const [serverStatus, setServerStatus] = useState("checking"); // 'checking' | 'ready' | 'waking'
 
   const [formData, setFormData] = useState({
     username: "",
     password: "",
   });
 
+  // Proactively pre-warm backend on component mount (safe idempotent GET /health)
+  useEffect(() => {
+    let isMounted = true;
+    checkBackendHealth()
+      .then((res) => {
+        if (!isMounted) return;
+        if (res.ok) {
+          setServerStatus("ready");
+        } else {
+          setServerStatus("waking");
+        }
+      })
+      .catch(() => {
+        if (isMounted) setServerStatus("waking");
+      });
+
+    const handleColdStart = () => {
+      if (isMounted) setServerStatus("waking");
+    };
+
+    window.addEventListener("backend-cold-start", handleColdStart);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("backend-cold-start", handleColdStart);
+    };
+  }, []);
+
   const handleChange = (e) => {
     setErrorMsg("");
+    setIsTimeoutError(false);
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
@@ -26,7 +56,7 @@ const Login = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!formData.username.trim() || !formData.password.trim()) {
       setErrorMsg("Please enter your username/email and password.");
       return;
@@ -34,6 +64,7 @@ const Login = () => {
 
     setLoading(true);
     setErrorMsg("");
+    setIsTimeoutError(false);
 
     try {
       const data = await loginUser(formData);
@@ -57,15 +88,38 @@ const Login = () => {
       }
     } catch (error) {
       console.error("Login failed:", error);
-      let detail = error.response?.data?.detail;
-      if (Array.isArray(detail)) {
-        detail = detail.map((err) => err.msg || JSON.stringify(err)).join(", ");
-      } else if (typeof detail === "object" && detail !== null) {
-        detail = detail.msg || JSON.stringify(detail);
-      } else if (!detail) {
-        detail = error.message || "Invalid username/email or password.";
+
+      const isTimeout =
+        error.code === "ECONNABORTED" ||
+        (typeof error.message === "string" && error.message.toLowerCase().includes("timeout"));
+      const isNetwork =
+        !error.response ||
+        (typeof error.message === "string" && error.message.includes("Network Error"));
+      const isServer5xx = [502, 503, 504].includes(error.response?.status);
+
+      if (isTimeout || isNetwork || isServer5xx) {
+        setIsTimeoutError(true);
+        setServerStatus("waking");
+        setErrorMsg(
+          "The server is taking longer than expected to respond (backend may be spinning up from idle state). Please try again in a moment."
+        );
+      } else if (error.response?.status === 401) {
+        setErrorMsg("Invalid username/email or password.");
+      } else if (error.response?.status === 500) {
+        setErrorMsg("Internal server error occurred. Please try again shortly.");
+      } else if (error.friendlyMessage) {
+        setErrorMsg(error.friendlyMessage);
+      } else {
+        let detail = error.response?.data?.detail;
+        if (Array.isArray(detail)) {
+          detail = detail.map((err) => err.msg || JSON.stringify(err)).join(", ");
+        } else if (typeof detail === "object" && detail !== null) {
+          detail = detail.msg || JSON.stringify(detail);
+        } else if (!detail) {
+          detail = "Invalid username/email or password.";
+        }
+        setErrorMsg(detail);
       }
-      setErrorMsg(detail);
     } finally {
       setLoading(false);
     }
@@ -73,13 +127,42 @@ const Login = () => {
 
   return (
     <AuthLayout>
-      <h1 className="text-4xl font-bold text-center mb-8 text-blue-600">
+      <h1 className="text-4xl font-bold text-center mb-6 text-blue-600">
         Smart Developer Dashboard
       </h1>
 
+      {serverStatus === "waking" && (
+        <div
+          id="backend-waking-banner"
+          className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2"
+        >
+          <span className="animate-pulse text-base">⚡</span>
+          <span>
+            Backend service is waking up from idle state. Requests may take a moment to initialize.
+          </span>
+        </div>
+      )}
+
       {errorMsg && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
-          {errorMsg}
+        <div
+          id="login-error-message"
+          className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-medium flex flex-col gap-2"
+        >
+          <div className="flex items-start gap-2">
+            <span className="text-red-500 font-bold">⚠️</span>
+            <div className="flex-1">{errorMsg}</div>
+          </div>
+          {isTimeoutError && (
+            <button
+              type="button"
+              id="login-retry-button"
+              onClick={handleSubmit}
+              disabled={loading}
+              className="self-end mt-1 px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold transition disabled:opacity-50"
+            >
+              {loading ? "Retrying..." : "Retry Login"}
+            </button>
+          )}
         </div>
       )}
 

@@ -52,6 +52,10 @@ from sqlalchemy import func
 
 # =========================================================
 # AUTHENTICATE USER
+from app.core.oauth2 import get_current_user  # Re-export for router compatibility
+
+# =========================================================
+# AUTHENTICATE USER
 # =========================================================
 
 def authenticate_user(
@@ -64,14 +68,26 @@ def authenticate_user(
 
     clean_username = username.strip()
 
+    # 1. Fast indexed query first (avoids full table scan on case-insensitive expression)
     user = (
         db.query(User)
         .filter(
-            (func.lower(User.email) == clean_username.lower())
-            | (func.lower(User.username) == clean_username.lower())
+            (User.email == clean_username)
+            | (User.username == clean_username)
         )
         .first()
     )
+
+    # 2. Case-insensitive fallback if exact match wasn't found
+    if not user:
+        user = (
+            db.query(User)
+            .filter(
+                (func.lower(User.email) == clean_username.lower())
+                | (func.lower(User.username) == clean_username.lower())
+            )
+            .first()
+        )
 
     if not user:
         return None

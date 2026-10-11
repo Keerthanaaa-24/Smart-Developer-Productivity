@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.services.auth_service import get_current_user
+from app.core.oauth2 import get_current_user
 from app.models.user import User
 from app.services.portfolio_service import portfolio_service
 from app.schemas.portfolio_schema import PortfolioSettingsUpdate

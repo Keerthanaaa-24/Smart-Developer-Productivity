@@ -204,8 +204,13 @@ def get_current_authenticated_user(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    from app.models.user_settings import UserSettings
-    settings = db.query(UserSettings).filter(UserSettings.user_id == current_user.id).first()
+    settings = None
+    try:
+        from app.models.user_settings import UserSettings
+        settings = db.query(UserSettings).filter(UserSettings.user_id == current_user.id).first()
+    except Exception as settings_err:
+        import logging
+        logging.getLogger("uvicorn.error").warning(f"/auth/me settings lookup warning: {settings_err}")
 
     return {
         "id": current_user.id,
