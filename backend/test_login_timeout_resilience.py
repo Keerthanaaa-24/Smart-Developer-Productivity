@@ -135,6 +135,43 @@ class TestLoginTimeoutAndResilience(unittest.TestCase):
         data = response.json()
         self.assertEqual(data.get("status"), "healthy")
         self.assertEqual(data.get("service"), "smart-developer-productivity-api")
+        self.assertEqual(data.get("probe"), "liveness")
+
+    def test_health_and_database_readiness_reported_separately(self):
+        """Verify /health (liveness) and /health/ready (readiness) are distinct endpoints."""
+        live_res = self.client.get("/health")
+        self.assertEqual(live_res.status_code, 200)
+        live_data = live_res.json()
+        self.assertEqual(live_data.get("probe"), "liveness")
+
+        ready_res = self.client.get("/health/ready")
+        self.assertEqual(ready_res.status_code, 200)
+        ready_data = ready_res.json()
+        self.assertEqual(ready_data.get("probe"), "readiness")
+        self.assertEqual(ready_data.get("database"), "connected")
+
+    def test_health_ready_reports_503_when_database_unavailable(self):
+        """Verify /health/ready reports 503 and 'disconnected' when MySQL is unreachable."""
+        with patch("app.main.verify_database_connection", return_value=False):
+            ready_res = self.client.get("/health/ready")
+            self.assertEqual(ready_res.status_code, 503)
+            data = ready_res.json()
+            self.assertEqual(data.get("status"), "unavailable")
+            self.assertEqual(data.get("database"), "disconnected")
+
+            # /health liveness probe remains 200 healthy so container orchestrator is not killed prematurely
+            live_res = self.client.get("/health")
+            self.assertEqual(live_res.status_code, 200)
+
+    def test_bounded_database_pool_and_timeouts(self):
+        """Verify safe connection pool limits and bounded connect/pool timeouts."""
+        from app.core.database import engine
+        # Verify pool size bounded (<= 5 to avoid Aiven connection exhaustion)
+        self.assertLessEqual(engine.pool.size(), 5)
+        # Verify bounded pool timeout
+        self.assertLessEqual(engine.pool._timeout, 10)
+        # Verify bounded recycle
+        self.assertLessEqual(engine.pool._recycle, 300)
 
     def test_cors_headers_production_origin(self):
         """Verify CORS preflight correctly acknowledges production Vercel frontend origin."""
@@ -204,22 +241,19 @@ class TestLoginTimeoutAndResilience(unittest.TestCase):
     def test_database_connection_failure_during_login(self):
         """
         Test that database operational errors during authentication are safely caught
-        and do not leak sensitive credentials or internal stack traces to the client.
+        and return HTTP 503 without leaking credentials or stack traces.
         """
         with patch("app.routes.auth_routes.authenticate_user") as mock_auth:
             mock_auth.side_effect = OperationalError("Lost connection to MySQL server at 'remote-cloud:3306'", {}, None)
             
-            try:
-                response = self.client.post(
-                    "/auth/login",
-                    data={"username": "Keerthzz", "password": "password123"},
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-                )
-                self.assertIn(response.status_code, [500, 503])
-                self.assertNotIn("password", response.text.lower())
-            except OperationalError:
-                # OperationalError raised without leaking password
-                pass
+            response = self.client.post(
+                "/auth/login",
+                data={"username": "Keerthzz", "password": "password123"},
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            self.assertEqual(response.status_code, 503)
+            self.assertIn("unavailable", response.json().get("detail", "").lower())
+            self.assertNotIn("password123", response.text)
 
     # =========================================================================
     # 5. PHASE 1-4 FEATURES & USER DATA PRESERVATION

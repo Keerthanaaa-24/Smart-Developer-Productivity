@@ -17,11 +17,13 @@ class Settings(BaseModel):
         "DATABASE_URL",
         "sqlite:///./smart_developer_productivity.db",
     )
-    DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "10"))
-    DB_MAX_OVERFLOW: int = int(os.getenv("DB_MAX_OVERFLOW", "20"))
-    DB_POOL_TIMEOUT: int = int(os.getenv("DB_POOL_TIMEOUT", "30"))
-    DB_POOL_RECYCLE: int = int(os.getenv("DB_POOL_RECYCLE", "1800"))
-    DB_CONNECT_TIMEOUT: int = int(os.getenv("DB_CONNECT_TIMEOUT", "15"))
+    DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "5"))
+    DB_MAX_OVERFLOW: int = int(os.getenv("DB_MAX_OVERFLOW", "5"))
+    DB_POOL_TIMEOUT: int = int(os.getenv("DB_POOL_TIMEOUT", "10"))
+    DB_POOL_RECYCLE: int = int(os.getenv("DB_POOL_RECYCLE", "300"))
+    DB_CONNECT_TIMEOUT: int = int(os.getenv("DB_CONNECT_TIMEOUT", "7"))
+    DB_READ_TIMEOUT: int = int(os.getenv("DB_READ_TIMEOUT", "10"))
+    DB_WRITE_TIMEOUT: int = int(os.getenv("DB_WRITE_TIMEOUT", "10"))
     DB_SSL_DISABLED: bool = os.getenv("DB_SSL_DISABLED", "").lower() in ("1", "true", "yes")
 
     # SSL CA Cert for cloud databases (e.g. Aiven MySQL 8.4)

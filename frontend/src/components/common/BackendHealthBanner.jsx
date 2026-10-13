@@ -28,8 +28,8 @@ const BackendHealthBanner = () => {
         headers: { Accept: "application/json" },
       }).catch(() => null);
 
-      // Fallback to standard liveness if ready probe route not available
-      if (!res || !res.ok) {
+      // Only fallback to liveness probe if readiness endpoint is completely missing (404)
+      if (res && res.status === 404) {
         res = await fetch(`${API_BASE_URL}/health`, {
           signal: controller.signal,
           headers: { Accept: "application/json" },

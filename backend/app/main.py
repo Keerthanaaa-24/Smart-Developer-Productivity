@@ -271,10 +271,15 @@ def home():
 
 @app.get("/health")
 def health_check():
-    """Fast liveness probe for Render container orchestrator."""
+    """
+    Fast liveness probe for container orchestrator (Render/Docker).
+    Reports service process liveness separately from database readiness.
+    """
     return {
         "status": "healthy",
         "service": "smart-developer-productivity-api",
+        "probe": "liveness",
+        "readiness_endpoint": "/health/ready",
     }
 
 
@@ -292,10 +297,36 @@ def readiness_check(response: Response):
             "status": "unavailable",
             "database": "disconnected",
             "service": "smart-developer-productivity-api",
+            "probe": "readiness",
             "message": "Database connectivity check failed or waiting on cold start.",
         }
     return {
         "status": "ready",
         "database": "connected",
         "service": "smart-developer-productivity-api",
+        "probe": "readiness",
+    }
+
+
+@app.get("/health/status")
+def health_status_check(response: Response):
+    """
+    Combined health and readiness status report.
+    Returns 503 with degraded status when MySQL is unavailable.
+    """
+    is_db_ready = verify_database_connection()
+    if not is_db_ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {
+            "status": "degraded",
+            "service": "healthy",
+            "database": "disconnected",
+            "ready": False,
+            "message": "API process is running but database connection is unavailable.",
+        }
+    return {
+        "status": "healthy",
+        "service": "healthy",
+        "database": "connected",
+        "ready": True,
     }

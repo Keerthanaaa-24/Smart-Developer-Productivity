@@ -38,20 +38,28 @@ export const changePassword = async (currentPassword, newPassword) => {
 };
 
 /**
- * Proactively checks backend health endpoint to pre-warm sleeping Render container.
- * Uses bounded retries on the safe idempotent GET /health endpoint.
+ * Proactively checks backend readiness endpoint to pre-warm sleeping Render container
+ * and verify database connectivity.
+ * Uses bounded retries on the safe idempotent GET /health/ready endpoint.
  */
 export const checkBackendHealth = async (retries = 2, delayMs = 1500) => {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const response = await API.get("/health", {
-        timeout: 10000,
+      const response = await API.get("/health/ready", {
+        timeout: 7000,
         skipDeduplication: true,
       });
-      return { ok: true, data: response.data, attempt };
+      if (response.data?.database === "connected" || response.status === 200) {
+        return { ok: true, data: response.data, attempt };
+      }
     } catch (err) {
       if (attempt === retries) {
-        return { ok: false, error: err, attempt };
+        return {
+          ok: false,
+          error: err,
+          attempt,
+          isDbCold: err.response?.status === 503 || err.response?.data?.database === "disconnected",
+        };
       }
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }

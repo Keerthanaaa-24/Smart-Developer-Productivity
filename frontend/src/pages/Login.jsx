@@ -101,6 +101,7 @@ const Login = () => {
         setIsTimeoutError(true);
         setServerStatus("waking");
         setErrorMsg(
+          error.response?.data?.detail ||
           "The server is taking longer than expected to respond (backend may be spinning up from idle state). Please try again in a moment."
         );
       } else if (error.response?.status === 401) {

@@ -43,7 +43,7 @@ router = APIRouter(
 
 
 from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 
 # =========================================================
 # REGISTER
@@ -153,11 +153,24 @@ async def login_user(
             detail="Username/email and password are required",
         )
 
-    user = authenticate_user(
-        db,
-        username,
-        password,
-    )
+    try:
+        user = authenticate_user(
+            db,
+            username,
+            password,
+        )
+    except (OperationalError, SQLAlchemyError, TimeoutError, Exception) as db_exc:
+        # Re-raise standard HTTPExceptions if any
+        if isinstance(db_exc, HTTPException):
+            raise db_exc
+        import logging
+        logging.getLogger("uvicorn.error").error(
+            f"Database connectivity error during login: {type(db_exc).__name__}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service is temporarily unavailable or warming up. Please try again shortly.",
+        )
 
     if not user:
         raise HTTPException(
