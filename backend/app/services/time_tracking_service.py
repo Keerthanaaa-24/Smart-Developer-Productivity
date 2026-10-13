@@ -353,7 +353,14 @@ class TimeTrackingService:
                 }
 
         # 5. User Target Comparisons
-        user_settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+        user_settings = None
+        try:
+            user_settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+        except Exception as e:
+            import logging
+            logging.getLogger("uvicorn.error").warning(f"[TimeTracking] Could not load UserSettings for user {user_id}: {e}")
+            db.rollback()
+
         coding_target_hours = float(user_settings.daily_coding_target_hours or 2.0) if user_settings else 2.0
         learning_target_hours = float(user_settings.daily_learning_target_hours or 1.0) if user_settings else 1.0
 

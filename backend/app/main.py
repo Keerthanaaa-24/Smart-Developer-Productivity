@@ -97,14 +97,16 @@ async def _periodic_notification_worker():
             await asyncio.sleep(60)
 
 
+from app.core.schema_sync import sync_database_schema
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Schema check
+    # Automated Schema Reconciliation (Tables & Missing Columns)
     try:
-        Base.metadata.create_all(bind=engine)
+        sync_database_schema(target_engine=engine)
     except Exception as e:
         import logging
-        logging.getLogger("uvicorn.error").warning(f"Schema verify warning: {e}")
+        logging.getLogger("uvicorn.error").warning(f"Schema sync warning: {e}")
 
     # Start background notification task
     task = asyncio.create_task(_periodic_notification_worker())

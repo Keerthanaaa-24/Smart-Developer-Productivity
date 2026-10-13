@@ -49,7 +49,13 @@ class CareerReadinessService:
         gfg = db.query(GeeksForGeeksConnection).filter(GeeksForGeeksConnection.user_id == user_id).first()
         fcc = db.query(FreeCodeCampConnection).filter(FreeCodeCampConnection.user_id == user_id).first()
         li = db.query(LinkedInConnection).filter(LinkedInConnection.user_id == user_id).first()
-        settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+        settings = None
+        try:
+            settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+        except Exception as e:
+            import logging
+            logging.getLogger("uvicorn.error").warning(f"[CareerReadiness] Could not load UserSettings for user {user_id}: {e}")
+            db.rollback()
 
         # 2. Extract Evidence Metrics
 

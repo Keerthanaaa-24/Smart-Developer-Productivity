@@ -672,7 +672,14 @@ def get_dashboard_overview(db: Session, user_id: int, force_refresh: bool = Fals
     from app.services.project_service import get_user_projects
 
     user = db.query(User).filter(User.id == user_id).first()
-    settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+    settings = None
+    try:
+        settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+    except Exception as e:
+        import logging
+        logging.getLogger("uvicorn.error").warning(f"[DashboardService] Could not load UserSettings for user {user_id}: {e}")
+        db.rollback()
+
     user_name = (
         settings.full_name.strip()
         if (settings and settings.full_name and settings.full_name.strip())

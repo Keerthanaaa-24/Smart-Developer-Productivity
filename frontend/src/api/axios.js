@@ -51,8 +51,18 @@ API.interceptors.request.use(
     if (method === "get" && !config.skipDeduplication) {
       const key = getRequestKey(config);
       if (inFlightRequests.has(key)) {
-        // Return existing in-flight promise wrapped in adapter
         config.adapter = () => inFlightRequests.get(key);
+      } else {
+        const defaultAdapter = config.adapter || axios.defaults.adapter;
+        config.adapter = async (cfg) => {
+          const promise = defaultAdapter(cfg);
+          inFlightRequests.set(key, promise);
+          try {
+            return await promise;
+          } finally {
+            inFlightRequests.delete(key);
+          }
+        };
       }
     }
 
@@ -69,22 +79,17 @@ API.interceptors.request.use(
 
 API.interceptors.response.use(
   (response) => {
-    const method = (response.config?.method || "get").toLowerCase();
-    if (method === "get") {
-      const key = getRequestKey(response.config || {});
-      inFlightRequests.delete(key);
-    }
     return response;
   },
   async (error) => {
+    // 0. Explicitly ignore client abort / cancellation
+    if (axios.isCancel(error) || error.name === "CanceledError") {
+      return Promise.reject(error);
+    }
+
     const config = error.config || {};
     const url = config.url || "";
     const method = (config.method || "get").toLowerCase();
-
-    if (method === "get") {
-      const key = getRequestKey(config);
-      inFlightRequests.delete(key);
-    }
 
     // 1. Session Expiration (401 Unauthorized on protected routes)
     if (error.response?.status === 401) {
@@ -113,17 +118,17 @@ API.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // 2. Cold-start & timeout detection
+    // 2. Genuine cold-start & timeout detection (never trigger on client cancellations or 4xx/500 application errors)
     const isTimeout =
       error.code === "ECONNABORTED" ||
       (typeof error.message === "string" && error.message.toLowerCase().includes("timeout"));
     const isNetworkError =
-      !error.response ||
-      (typeof error.message === "string" && error.message.includes("Network Error"));
+      !error.response &&
+      (typeof error.message === "string" && (error.message.includes("Network Error") || error.code === "ERR_NETWORK"));
     const isColdStartStatus = [502, 503, 504].includes(error.response?.status);
-    const isServerErrorOrTimeout = isTimeout || isNetworkError || isColdStartStatus;
+    const isGenuineColdStart = isTimeout || isColdStartStatus || (isNetworkError && (typeof navigator === "undefined" || navigator.onLine !== false));
 
-    if (isServerErrorOrTimeout && typeof window !== "undefined") {
+    if (isGenuineColdStart && typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("backend-cold-start", {
           detail: { url, method, isTimeout, status: error.response?.status },
@@ -140,7 +145,7 @@ API.interceptors.response.use(
       url.includes("/github/login") ||
       url.includes("/github/callback");
 
-    if (isSafeGet && !isOAuthFlow && isServerErrorOrTimeout && !config._retry) {
+    if (isSafeGet && !isOAuthFlow && isGenuineColdStart && !config._retry) {
       config._retry = true;
       console.info(`[Render Cold-Start] Retrying safe GET request: ${url}`);
       // Wait 1.5s before retry

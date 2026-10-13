@@ -64,9 +64,12 @@ def normalize_category(platform: str, explicit_category: str | None = None) -> s
 
 
 def is_activity_tracking_enabled(db: Session, user_id: int) -> bool:
-    settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
-    if settings and settings.activity_tracking is False:
-        return False
+    try:
+        settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+        if settings and settings.activity_tracking is False:
+            return False
+    except Exception:
+        db.rollback()
     return True
 
 

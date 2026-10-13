@@ -32,11 +32,19 @@ def dashboard_overview(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return get_dashboard_overview(
+    import time
+    import logging
+    t0 = time.monotonic()
+    data = get_dashboard_overview(
         db=db,
         user_id=current_user.id,
         force_refresh=refresh,
     )
+    duration_ms = round((time.monotonic() - t0) * 1000, 2)
+    logging.getLogger("uvicorn.error").info(
+        f"[DASHBOARD_DIAG] /dashboard/overview user_id={current_user.id} refresh={refresh} duration_ms={duration_ms}"
+    )
+    return data
 
 
 # =====================================================
@@ -49,13 +57,18 @@ def dashboard_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-
+    import time
+    import logging
+    t0 = time.monotonic()
     stats = get_dashboard_stats(
         db,
         current_user.id,
         force_refresh=refresh,
     )
-
+    duration_ms = round((time.monotonic() - t0) * 1000, 2)
+    logging.getLogger("uvicorn.error").info(
+        f"[DASHBOARD_DIAG] /dashboard/stats user_id={current_user.id} duration_ms={duration_ms}"
+    )
     return stats
 
 

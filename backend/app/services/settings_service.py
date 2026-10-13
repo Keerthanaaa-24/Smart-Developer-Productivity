@@ -18,7 +18,14 @@ from app.core.cache import user_cache
 
 
 def get_or_create_user_settings(db: Session, user_id: int) -> UserSettings:
-    settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+    settings = None
+    try:
+        settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+    except Exception as e:
+        import logging
+        logging.getLogger("uvicorn.error").warning(f"[SettingsService] Query error: {e}")
+        db.rollback()
+
     if not settings:
         settings = UserSettings(
             user_id=user_id,

@@ -20,7 +20,7 @@ const BackendHealthBanner = () => {
   const checkHealth = useCallback(async () => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 9000);
       
       // Probe readiness endpoint first (verifies both API and database)
       let res = await fetch(`${API_BASE_URL}/health/ready`, {
@@ -98,10 +98,18 @@ const BackendHealthBanner = () => {
   };
 
   useEffect(() => {
-    // Initial silent check on mount
+    let isMounted = true;
+    // Initial silent check on mount with confirmation before waking banner
     checkHealth().then((ok) => {
-      if (!ok) {
-        startWakingSequence();
+      if (!ok && isMounted) {
+        // Confirmation probe after 1.5s to prevent false alarm on first TLS handshake
+        setTimeout(async () => {
+          if (!isMounted) return;
+          const retryOk = await checkHealth();
+          if (!retryOk && isMounted && statusRef.current !== "waking") {
+            startWakingSequence();
+          }
+        }, 1500);
       }
     });
 

@@ -158,7 +158,13 @@ class PortfolioService:
             )
 
         user = db.query(User).filter(User.id == portfolio.user_id).first()
-        user_settings = db.query(UserSettings).filter(UserSettings.user_id == portfolio.user_id).first()
+        user_settings = None
+        try:
+            user_settings = db.query(UserSettings).filter(UserSettings.user_id == portfolio.user_id).first()
+        except Exception as e:
+            import logging
+            logging.getLogger("uvicorn.error").warning(f"[PortfolioService] Could not load UserSettings for user {portfolio.user_id}: {e}")
+            db.rollback()
         user_id = portfolio.user_id
 
         # Name resolution

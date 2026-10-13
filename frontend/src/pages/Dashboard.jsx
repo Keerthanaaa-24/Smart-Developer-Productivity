@@ -125,6 +125,17 @@ const Dashboard = () => {
               ))}
             </div>
           </div>
+        ) : !overview && error ? (
+          <div className="bg-slate-900/40 border border-rose-500/30 rounded-3xl p-8 text-center backdrop-blur-md">
+            <p className="text-slate-300 font-semibold text-base mb-2">Telemetry Data Unavailable</p>
+            <p className="text-slate-400 text-sm max-w-md mx-auto mb-5">{error}</p>
+            <button
+              onClick={() => fetchOverview(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm transition shadow-lg cursor-pointer"
+            >
+              Retry Loading Telemetry
+            </button>
+          </div>
         ) : (
           <PrimaryFiveMetrics
             metrics={overview?.primary_metrics}
@@ -135,7 +146,7 @@ const Dashboard = () => {
         {/* STAGE 1.5: Real-Time Machine Learning Productivity Intelligence */}
         {loading && !overview ? (
           <SkeletonBlock className="h-64" />
-        ) : (
+        ) : !overview && error ? null : (
           <MLProductivityCard
             mlData={overview?.ml_prediction}
             onRefresh={() => fetchOverview(true)}

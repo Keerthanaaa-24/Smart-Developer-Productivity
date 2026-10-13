@@ -153,6 +153,8 @@ async def login_user(
             detail="Username/email and password are required",
         )
 
+    import time
+    t0 = time.monotonic()
     try:
         user = authenticate_user(
             db,
@@ -165,19 +167,30 @@ async def login_user(
             raise db_exc
         import logging
         logging.getLogger("uvicorn.error").error(
-            f"Database connectivity error during login: {type(db_exc).__name__}"
+            f"[AUTH_DIAG] Database connectivity error during login: {type(db_exc).__name__}"
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database service is temporarily unavailable or warming up. Please try again shortly.",
         )
 
+    duration_ms = round((time.monotonic() - t0) * 1000, 2)
+
     if not user:
+        import logging
+        logging.getLogger("uvicorn.error").warning(
+            f"[AUTH_DIAG] Login failed: invalid credentials duration_ms={duration_ms}"
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    import logging
+    logging.getLogger("uvicorn.error").info(
+        f"[AUTH_DIAG] Login successful user_id={user.id} duration_ms={duration_ms}"
+    )
 
     # Record login history for authentic login streak calculation
     try:
