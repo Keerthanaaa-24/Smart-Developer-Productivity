@@ -39,10 +39,16 @@ const Login = () => {
       if (isMounted) setServerStatus("waking");
     };
 
+    const handleWarmed = () => {
+      if (isMounted) setServerStatus("ready");
+    };
+
     window.addEventListener("backend-cold-start", handleColdStart);
+    window.addEventListener("backend-warmed", handleWarmed);
     return () => {
       isMounted = false;
       window.removeEventListener("backend-cold-start", handleColdStart);
+      window.removeEventListener("backend-warmed", handleWarmed);
     };
   }, []);
 

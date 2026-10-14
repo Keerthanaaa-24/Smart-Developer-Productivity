@@ -89,6 +89,14 @@ API.interceptors.request.use(
 
 API.interceptors.response.use(
   (response) => {
+    // When a request succeeds, notify status manager to clear any waking banner immediately
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("backend-status-report", {
+          detail: { status: "ready" },
+        })
+      );
+    }
     return response;
   },
   async (error) => {
@@ -100,9 +108,10 @@ API.interceptors.response.use(
     const config = error.config || {};
     const url = config.url || "";
     const method = (config.method || "get").toLowerCase();
+    const status = error.response?.status;
 
     // 1. Session Expiration (401 Unauthorized on protected routes)
-    if (error.response?.status === 401) {
+    if (status === 401) {
       const isAuthRequest = url.includes("/auth/login") || url.includes("/auth/register");
       
       if (!isAuthRequest) {
@@ -128,20 +137,57 @@ API.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // 2. Genuine cold-start & timeout detection (never trigger on client cancellations or 4xx/500 application errors)
+    // 2. Offline browser detection
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("backend-status-report", {
+            detail: { status: "offline" },
+          })
+        );
+      }
+      error.friendlyMessage = "You appear to be offline. Please check your internet connection.";
+      error.message = error.friendlyMessage;
+      return Promise.reject(error);
+    }
+
+    // 3. Database Unavailable vs Genuine Cold-Start vs Application Error
+    const isDbUnavailable =
+      status === 503 &&
+      (error.response?.data?.database === "disconnected" ||
+        error.response?.data?.probe === "readiness" ||
+        (typeof error.response?.data?.detail === "string" && error.response.data.detail.toLowerCase().includes("database")));
+
+    const isAppServerError = status === 500;
+
     const isTimeout =
       error.code === "ECONNABORTED" ||
       (typeof error.message === "string" && error.message.toLowerCase().includes("timeout"));
+
     const isNetworkError =
       !error.response &&
       (typeof error.message === "string" && (error.message.includes("Network Error") || error.code === "ERR_NETWORK"));
-    const isColdStartStatus = [502, 503, 504].includes(error.response?.status);
-    const isGenuineColdStart = isTimeout || isColdStartStatus || (isNetworkError && (typeof navigator === "undefined" || navigator.onLine !== false));
 
-    if (isGenuineColdStart && typeof window !== "undefined") {
+    const isColdStartStatus = status === 502 || status === 504 || (status === 503 && !isDbUnavailable);
+    const isGenuineColdStart = isTimeout || isColdStartStatus || isNetworkError;
+
+    if (isDbUnavailable && typeof window !== "undefined") {
       window.dispatchEvent(
-        new CustomEvent("backend-cold-start", {
-          detail: { url, method, isTimeout, status: error.response?.status },
+        new CustomEvent("backend-status-report", {
+          detail: { status: "database_unavailable", url, method },
+        })
+      );
+    } else if (isGenuineColdStart && typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("backend-status-report", {
+          detail: { status: "cold_start", url, method, isTimeout, status },
+        })
+      );
+    } else if (isAppServerError && typeof window !== "undefined") {
+      // Do NOT trigger cold start banner for 500 application errors
+      window.dispatchEvent(
+        new CustomEvent("backend-status-report", {
+          detail: { status: "error", message: "Application server error" },
         })
       );
     }
@@ -164,7 +210,10 @@ API.interceptors.response.use(
     }
 
     // 3. User-Friendly Error Classification
-    if (isTimeout) {
+    if (isDbUnavailable) {
+      error.friendlyMessage =
+        "Database temporarily unavailable. Please try again in a moment.";
+    } else if (isTimeout) {
       error.friendlyMessage =
         "The server is taking longer than expected to respond (backend may be waking up from an idle state). Please try again in a moment.";
     } else if (isNetworkError) {

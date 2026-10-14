@@ -1,202 +1,177 @@
-import { useEffect, useState, useRef, useCallback } from "react";
-import { FaBolt, FaCheckCircle, FaSyncAlt, FaRedo } from "react-icons/fa";
-import { API_BASE_URL } from "../../utils/constants";
+import { useBackendStatus } from "../../context/BackendStatusContext";
+import {
+  FaCheckCircle,
+  FaDatabase,
+  FaWifi,
+  FaExclamationCircle,
+  FaSyncAlt,
+  FaTimes,
+  FaRedo,
+} from "react-icons/fa";
 
+/**
+ * BackendHealthBanner
+ * An unobtrusive, non-blocking status indicator for backend states.
+ * - Stays completely invisible when the backend is operating normally ('idle').
+ * - Renders a sleek, compact pill badge when a cold start, connection delay, or offline state occurs.
+ * - Does not block user navigation, scrolling, or clicks on underlying page components.
+ * - Provides working retry and dismiss actions.
+ */
 const BackendHealthBanner = () => {
-  const [status, setStatus] = useState("idle"); // 'idle' | 'waking' | 'ready'
-  const [elapsed, setElapsed] = useState(0);
-  const [isManualChecking, setIsManualChecking] = useState(false);
-  
-  const statusRef = useRef("idle");
-  const pollTimerRef = useRef(null);
-  const elapsedTimerRef = useRef(null);
-  const retryDelayRef = useRef(2000); // Exponential backoff starts at 2s
+  const { status, message, elapsed, isDelayed, isRetrying, retry, dismiss } = useBackendStatus();
 
-  const updateStatus = (newStatus) => {
-    statusRef.current = newStatus;
-    setStatus(newStatus);
-  };
-
-  const checkHealth = useCallback(async () => {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 9000);
-      
-      // Probe readiness endpoint first (verifies both API and database)
-      let res = await fetch(`${API_BASE_URL}/health/ready`, {
-        signal: controller.signal,
-        headers: { Accept: "application/json" },
-      }).catch(() => null);
-
-      // Only fallback to liveness probe if readiness endpoint is completely missing (404)
-      if (res && res.status === 404) {
-        res = await fetch(`${API_BASE_URL}/health`, {
-          signal: controller.signal,
-          headers: { Accept: "application/json" },
-        }).catch(() => null);
-      }
-
-      clearTimeout(timeoutId);
-
-      if (res && res.ok) {
-        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-        if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
-        retryDelayRef.current = 2000;
-
-        if (statusRef.current === "waking") {
-          updateStatus("ready");
-          window.dispatchEvent(new CustomEvent("backend-warmed"));
-          setTimeout(() => {
-            updateStatus("idle");
-          }, 3500);
-        } else {
-          updateStatus("idle");
-        }
-        return true;
-      }
-    } catch {
-      // Backend still cold or in-flight
-    }
-    return false;
-  }, []);
-
-  const scheduleNextPoll = useCallback(() => {
-    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-
-    pollTimerRef.current = setTimeout(async () => {
-      if (statusRef.current !== "waking") return;
-      const isOk = await checkHealth();
-      if (!isOk && statusRef.current === "waking") {
-        retryDelayRef.current = Math.min(10000, Math.round(retryDelayRef.current * 1.4));
-        scheduleNextPoll();
-      }
-    }, retryDelayRef.current);
-  }, [checkHealth]);
-
-  const startWakingSequence = useCallback(() => {
-    if (statusRef.current === "waking") return; // Avoid duplicate timers
-
-    updateStatus("waking");
-    setElapsed(0);
-    retryDelayRef.current = 2000;
-
-    if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
-    elapsedTimerRef.current = setInterval(() => {
-      setElapsed((prev) => {
-        const next = prev + 1;
-        // Bounded timeout: After 75s of waking sequence without success, stop continuous auto-polling
-        if (next >= 75) {
-          if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-        }
-        return next;
-      });
-    }, 1000);
-
-    scheduleNextPoll();
-  }, [scheduleNextPoll]);
-
-  const handleManualRetry = async () => {
-    setIsManualChecking(true);
-    const isOk = await checkHealth();
-    setIsManualChecking(false);
-    if (!isOk && statusRef.current !== "waking") {
-      startWakingSequence();
-    }
-  };
-
-  useEffect(() => {
-    let isMounted = true;
-    // Initial silent check on mount with confirmation before waking banner
-    checkHealth().then((ok) => {
-      if (!ok && isMounted) {
-        // Confirmation probe after 1.5s to prevent false alarm on first TLS handshake
-        setTimeout(async () => {
-          if (!isMounted) return;
-          const retryOk = await checkHealth();
-          if (!retryOk && isMounted && statusRef.current !== "waking") {
-            startWakingSequence();
-          }
-        }, 1500);
-      }
-    });
-
-    // Listen for axios cold start triggers from failed API requests
-    // Proactively verify whether backend is ACTUALLY sleeping to avoid
-    // triggering misleading cold-start banner on single application-level request failures
-    const handleColdStart = async () => {
-      if (statusRef.current === "waking") return;
-      const isAlive = await checkHealth();
-      if (!isAlive && statusRef.current !== "waking") {
-        startWakingSequence();
-      }
-    };
-
-    window.addEventListener("backend-cold-start", handleColdStart);
-
-    return () => {
-      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
-      window.removeEventListener("backend-cold-start", handleColdStart);
-    };
-  }, [checkHealth, startWakingSequence]);
-
-  if (status === "idle") return null;
+  if (status === "idle") {
+    return null;
+  }
 
   return (
     <aside
-      aria-label="Backend status"
-      className="fixed bottom-4 right-4 z-50 max-w-sm w-[calc(100vw-2rem)] sm:w-full transition-all duration-300 transform translate-y-0"
+      aria-label="Backend connection status"
+      className="fixed bottom-4 right-4 z-50 pointer-events-none transition-all duration-300 transform translate-y-0 animate-fadeIn"
     >
-      {status === "waking" && (
-        <div className="bg-slate-900/95 text-white border border-amber-500/40 rounded-2xl p-4 shadow-2xl backdrop-blur-md flex items-start gap-3">
-          <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl mt-0.5 animate-pulse shrink-0">
-            <FaBolt className="text-sm" />
+      <div className="pointer-events-auto max-w-sm rounded-full px-3.5 py-1.5 shadow-xl backdrop-blur-md text-xs font-medium flex items-center gap-2 border">
+        {/* =====================================================
+            STATE: READY / CONNECTED (TRANSIENT AUTO-FADE)
+        ===================================================== */}
+        {status === "ready" && (
+          <div className="flex items-center gap-2 text-emerald-300 bg-emerald-950/90 border-emerald-500/40 px-3 py-1 rounded-full">
+            <FaCheckCircle className="text-emerald-400 shrink-0 text-xs" />
+            <span className="truncate">{message || "Backend connected and ready"}</span>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">
-                {elapsed >= 75 ? "Backend Connection Delayed" : "Waking Backend Service"}
-              </h4>
-              <span className="text-[10px] text-slate-400 font-mono">
-                {elapsed}s
-              </span>
-            </div>
-            <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-              {elapsed >= 75
-                ? "The backend service is taking longer than usual to resume. Please click Retry or verify your network connection."
-                : "Render free-tier instance is spinning up. The interface remains interactive."}
-            </p>
-            <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-800">
-              <div className="flex items-center gap-2 text-[11px] text-amber-300/90">
-                <FaSyncAlt className="animate-spin text-[10px]" />
-                <span>Connecting to API...</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleManualRetry}
-                disabled={isManualChecking}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-300 hover:text-white px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 transition cursor-pointer disabled:opacity-50"
-              >
-                <FaRedo className={`text-[9px] ${isManualChecking ? "animate-spin" : ""}`} />
-                <span>Retry</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
 
-      {status === "ready" && (
-        <div className="bg-emerald-950/95 text-white border border-emerald-500/40 rounded-2xl p-3.5 shadow-2xl backdrop-blur-md flex items-center gap-3 animate-fadeIn">
-          <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-xl shrink-0">
-            <FaCheckCircle className="text-sm" />
+        {/* =====================================================
+            STATE: COLD START (SLEEPING RENDER INSTANCE WAKING)
+        ===================================================== */}
+        {status === "cold_start" && (
+          <div className="flex items-center gap-2.5 bg-slate-900/95 text-amber-200 border-amber-500/30 px-3.5 py-1.5 rounded-full shadow-lg">
+            <div className="relative flex items-center justify-center">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping absolute" />
+              <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+            </div>
+
+            {isDelayed ? (
+              <div className="flex items-center gap-2">
+                <span className="text-amber-200">Server is taking longer than expected</span>
+                <button
+                  type="button"
+                  onClick={retry}
+                  disabled={isRetrying}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-300 hover:text-white px-2 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 transition cursor-pointer disabled:opacity-50"
+                >
+                  <FaRedo className={`text-[9px] ${isRetrying ? "animate-spin" : ""}`} />
+                  <span>Retry</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span>Connecting to server...</span>
+                <span className="text-[10px] text-amber-400/80 font-mono">({elapsed}s)</span>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={dismiss}
+              className="text-slate-400 hover:text-white p-0.5 rounded-full transition ml-1 cursor-pointer"
+              title="Dismiss status"
+            >
+              <FaTimes className="text-[10px]" />
+            </button>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-emerald-200">
-              Backend connected and ready!
-            </p>
+        )}
+
+        {/* =====================================================
+            STATE: DATABASE TEMPORARILY UNAVAILABLE (HTTP 503)
+        ===================================================== */}
+        {status === "database_unavailable" && (
+          <div className="flex items-center gap-2 bg-slate-900/95 text-rose-200 border-rose-500/40 px-3.5 py-1.5 rounded-full shadow-lg">
+            <FaDatabase className="text-rose-400 shrink-0 text-xs" />
+            <span>Database temporarily unavailable</span>
+            <button
+              type="button"
+              onClick={retry}
+              disabled={isRetrying}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-300 hover:text-white px-2 py-0.5 rounded-full bg-rose-500/20 hover:bg-rose-500/30 transition cursor-pointer disabled:opacity-50 ml-1"
+            >
+              <FaRedo className={`text-[9px] ${isRetrying ? "animate-spin" : ""}`} />
+              <span>Retry</span>
+            </button>
+            <button
+              type="button"
+              onClick={dismiss}
+              className="text-slate-400 hover:text-white p-0.5 rounded-full transition ml-1 cursor-pointer"
+              title="Dismiss status"
+            >
+              <FaTimes className="text-[10px]" />
+            </button>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* =====================================================
+            STATE: OFFLINE (BROWSER NETWORK DISCONNECTED)
+        ===================================================== */}
+        {status === "offline" && (
+          <div className="flex items-center gap-2 bg-slate-900/95 text-slate-300 border-slate-700 px-3.5 py-1.5 rounded-full shadow-lg">
+            <FaWifi className="text-slate-400 shrink-0 text-xs" />
+            <span>You are currently offline</span>
+            <button
+              type="button"
+              onClick={retry}
+              disabled={isRetrying}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-200 hover:text-white px-2 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 transition cursor-pointer disabled:opacity-50 ml-1"
+            >
+              <FaRedo className={`text-[9px] ${isRetrying ? "animate-spin" : ""}`} />
+              <span>Check</span>
+            </button>
+            <button
+              type="button"
+              onClick={dismiss}
+              className="text-slate-400 hover:text-white p-0.5 rounded-full transition ml-1 cursor-pointer"
+              title="Dismiss status"
+            >
+              <FaTimes className="text-[10px]" />
+            </button>
+          </div>
+        )}
+
+        {/* =====================================================
+            STATE: APPLICATION SERVER ERROR (HTTP 500)
+        ===================================================== */}
+        {status === "error" && (
+          <div className="flex items-center gap-2 bg-slate-900/95 text-rose-200 border-rose-500/40 px-3.5 py-1.5 rounded-full shadow-lg">
+            <FaExclamationCircle className="text-rose-400 shrink-0 text-xs" />
+            <span>Server error occurred</span>
+            <button
+              type="button"
+              onClick={retry}
+              disabled={isRetrying}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-300 hover:text-white px-2 py-0.5 rounded-full bg-rose-500/20 hover:bg-rose-500/30 transition cursor-pointer disabled:opacity-50 ml-1"
+            >
+              <FaRedo className={`text-[9px] ${isRetrying ? "animate-spin" : ""}`} />
+              <span>Retry</span>
+            </button>
+            <button
+              type="button"
+              onClick={dismiss}
+              className="text-slate-400 hover:text-white p-0.5 rounded-full transition ml-1 cursor-pointer"
+              title="Dismiss status"
+            >
+              <FaTimes className="text-[10px]" />
+            </button>
+          </div>
+        )}
+
+        {/* =====================================================
+            STATE: CHECKING
+        ===================================================== */}
+        {status === "checking" && (
+          <div className="flex items-center gap-2 bg-slate-900/95 text-slate-300 border-slate-700 px-3.5 py-1.5 rounded-full shadow-lg">
+            <FaSyncAlt className="text-indigo-400 animate-spin text-xs" />
+            <span>Verifying connection...</span>
+          </div>
+        )}
+      </div>
     </aside>
   );
 };

@@ -8,6 +8,7 @@ import {
 
 import AuthProvider from "./context/AuthContext";
 import ThemeProvider from "./context/ThemeContext";
+import BackendStatusProvider from "./context/BackendStatusContext";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import BackendHealthBanner from "./components/common/BackendHealthBanner";
@@ -48,10 +49,11 @@ const App = () => {
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>
-          <BrowserRouter>
-            <BackendHealthBanner />
-            <Suspense fallback={<PageLoadingFallback />}>
-              <Routes>
+          <BackendStatusProvider>
+            <BrowserRouter>
+              <BackendHealthBanner />
+              <Suspense fallback={<PageLoadingFallback />}>
+                <Routes>
                 {/* =====================================================
                     PUBLIC ROUTES
                 ===================================================== */}
@@ -169,6 +171,7 @@ const App = () => {
               </Routes>
             </Suspense>
           </BrowserRouter>
+          </BackendStatusProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>
