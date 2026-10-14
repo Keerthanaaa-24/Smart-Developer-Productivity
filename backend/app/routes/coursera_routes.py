@@ -102,7 +102,7 @@ def coursera_status(
         user_cache.set(user_id, "platform_status:coursera", res, ttl=30)
         return res
 
-    profile_url = connection.profile_url or "https://www.coursera.org"
+    profile_url = connection.profile_url
 
     res = {
         "connected": True,
@@ -143,7 +143,7 @@ def coursera_profile(
             detail="Coursera account is not connected",
         )
 
-    profile_url = connection.profile_url or "https://www.coursera.org"
+    profile_url = connection.profile_url
 
     return {
         "username": connection.coursera_username,

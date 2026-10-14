@@ -82,7 +82,14 @@ const BackendHealthBanner = () => {
 
     if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
     elapsedTimerRef.current = setInterval(() => {
-      setElapsed((prev) => prev + 1);
+      setElapsed((prev) => {
+        const next = prev + 1;
+        // Bounded timeout: After 75s of waking sequence without success, stop continuous auto-polling
+        if (next >= 75) {
+          if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+        }
+        return next;
+      });
     }, 1000);
 
     scheduleNextPoll();
@@ -114,8 +121,12 @@ const BackendHealthBanner = () => {
     });
 
     // Listen for axios cold start triggers from failed API requests
-    const handleColdStart = () => {
-      if (statusRef.current !== "waking") {
+    // Proactively verify whether backend is ACTUALLY sleeping to avoid
+    // triggering misleading cold-start banner on single application-level request failures
+    const handleColdStart = async () => {
+      if (statusRef.current === "waking") return;
+      const isAlive = await checkHealth();
+      if (!isAlive && statusRef.current !== "waking") {
         startWakingSequence();
       }
     };
@@ -144,14 +155,16 @@ const BackendHealthBanner = () => {
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">
-                Waking Backend Service
+                {elapsed >= 75 ? "Backend Connection Delayed" : "Waking Backend Service"}
               </h4>
               <span className="text-[10px] text-slate-400 font-mono">
                 {elapsed}s
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-              Render free-tier instance is spinning up. The interface remains interactive.
+              {elapsed >= 75
+                ? "The backend service is taking longer than usual to resume. Please click Retry or verify your network connection."
+                : "Render free-tier instance is spinning up. The interface remains interactive."}
             </p>
             <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-800">
               <div className="flex items-center gap-2 text-[11px] text-amber-300/90">

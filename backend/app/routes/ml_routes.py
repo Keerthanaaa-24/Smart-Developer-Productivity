@@ -316,17 +316,14 @@ def get_model_status() -> Dict[str, Any]:
     try:
         predictor = get_productivity_predictor()
         return {
-            "status": "operational",
+            "status": "active",
+            "algorithm": "RandomForestRegressor",
+            "model_version": predictor.model_version,
+            "metrics": predictor.metrics,
+            "operational_status": "operational",
             "active_models": [
                 {
-                    "name": "7-Day Productivity Forecaster",
-                    "algorithm": "RidgeRegression + RandomForest Time-Lagged Ensemble",
-                    "version": "2.1.0-forecaster",
-                    "evaluation_strategy": "Rolling Time-Series Cross Validation (No Future Leakage)",
-                    "status": "active",
-                },
-                {
-                    "name": "Daily Productivity Regressor",
+                    "name": "Developer Productivity Forecaster & Intelligence Engine",
                     "algorithm": "RandomForestRegressor",
                     "version": predictor.model_version,
                     "metrics": predictor.metrics,
@@ -334,16 +331,16 @@ def get_model_status() -> Dict[str, Any]:
                     "status": "active",
                 },
                 {
-                    "name": "Explainable Career Readiness Evaluator",
-                    "algorithm": "Multi-Pillar Evidence Weighting Matrix v2.0",
+                    "name": "Career Readiness & Milestone Engine",
+                    "algorithm": "Rule-Based Multi-Pillar Evidence Evaluator",
                     "version": "2.0.0",
-                    "status": "active",
+                    "status": "active (rule-based)",
                 },
                 {
-                    "name": "Technical Skill-Gap Classifier",
-                    "algorithm": "Structured Skill Taxonomy & Evidence Linker",
+                    "name": "Technical Skill-Gap & Actionable Recommendation Engine",
+                    "algorithm": "Rule-Based Role Taxonomy & Evidence Linker",
                     "version": "2.0.0",
-                    "status": "active",
+                    "status": "active (rule-based)",
                 },
             ],
             "data_isolation_policy": "Strict per-user data boundaries",

@@ -173,6 +173,9 @@ const Analytics = () => {
       })
       .catch((err) => {
         console.warn("Overview fetch warning:", err.message);
+        if (!overviewRef.current) {
+          setGlobalError(err.friendlyMessage || "Unable to load analytics telemetry. Please check your connection.");
+        }
       })
       .finally(() => setOverviewLoading(false));
 
@@ -438,6 +441,21 @@ const Analytics = () => {
         {/* 1. DEVELOPER STREAK HIGHLIGHT HERO */}
         {streakLoading && !streak ? (
           <SkeletonCard className="h-56 bg-gradient-to-r from-orange-400/20 to-red-400/20" />
+        ) : !streak && streakError ? (
+          <div className="relative overflow-hidden rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-9 text-center shadow-xl">
+            <div className="w-12 h-12 rounded-2xl bg-orange-500/10 text-orange-400 flex items-center justify-center text-2xl mx-auto mb-3">
+              <FaFire />
+            </div>
+            <h3 className="text-base font-bold text-white mb-1">Streak Telemetry Unavailable</h3>
+            <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto mb-4">{streakError}</p>
+            <button
+              onClick={() => loadAnalytics(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs transition cursor-pointer"
+            >
+              <FaSyncAlt className="text-[10px]" />
+              <span>Retry Streak Telemetry</span>
+            </button>
+          </div>
         ) : (
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-orange-500 via-amber-600 to-red-600 text-white p-6 sm:p-9 shadow-xl border border-orange-400/30">
             <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
@@ -586,6 +604,18 @@ const Analytics = () => {
                 <p className="text-xl font-bold text-slate-400 mt-2">—</p>
                 <p className="text-xs text-slate-400 mt-1">Connect GitHub</p>
               </div>
+            </div>
+          ) : !githubStats && statsError ? (
+            <div className="bg-slate-800/40 border border-slate-700/60 rounded-2xl p-6 text-center my-2">
+              <p className="text-slate-300 text-sm font-semibold mb-1">GitHub Performance Telemetry Unavailable</p>
+              <p className="text-slate-400 text-xs max-w-md mx-auto mb-3">{statsError}</p>
+              <button
+                onClick={() => loadAnalytics(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition"
+              >
+                <FaSyncAlt className="text-[10px]" />
+                <span>Retry GitHub Stats</span>
+              </button>
             </div>
           ) : (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

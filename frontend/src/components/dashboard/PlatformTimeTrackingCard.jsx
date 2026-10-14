@@ -33,13 +33,17 @@ const PlatformTimeTrackingCard = () => {
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [selectedPlatformFilter, setSelectedPlatformFilter] = useState("all");
 
+  const [summaryError, setSummaryError] = useState("");
+
   const fetchSummary = useCallback(async () => {
     try {
       setLoading(true);
+      setSummaryError("");
       const res = await timeTrackingApi.getSummary();
       setData(res);
     } catch (err) {
       console.warn("Time tracking summary error:", err);
+      setSummaryError(err.friendlyMessage || "Time tracking telemetry unavailable");
     } finally {
       setLoading(false);
     }
@@ -79,6 +83,24 @@ const PlatformTimeTrackingCard = () => {
           <div className="h-24 bg-slate-100 dark:bg-slate-800/60 rounded-2xl" />
           <div className="h-24 bg-slate-100 dark:bg-slate-800/60 rounded-2xl" />
         </div>
+      </div>
+    );
+  }
+
+  if (!loading && !data && summaryError) {
+    return (
+      <div className="bg-slate-900/40 border border-slate-700/60 rounded-3xl p-6 sm:p-8 text-center backdrop-blur-md">
+        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-2xl mx-auto mb-3">
+          ⏱️
+        </div>
+        <p className="text-slate-200 font-semibold text-base mb-1">Time Tracking Telemetry Unavailable</p>
+        <p className="text-slate-400 text-xs sm:text-sm max-w-md mx-auto mb-4">{summaryError}</p>
+        <button
+          onClick={fetchSummary}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition shadow-md cursor-pointer"
+        >
+          Retry Loading Telemetry
+        </button>
       </div>
     );
   }

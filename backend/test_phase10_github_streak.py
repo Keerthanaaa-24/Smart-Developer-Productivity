@@ -187,11 +187,15 @@ def test_scenario_5_multi_user_isolation():
         db.query(DeveloperActivity).filter(DeveloperActivity.user_id == u2.id).delete()
         db.commit()
 
+        from app.core.cache import user_cache
+        user_cache.invalidate_user(u1.id)
+        user_cache.invalidate_user(u2.id)
+
         today = date.today()
         record_activity(db, u1.id, "github", "commit_contribution", 1, today, external_id=f"u1_gh_{today}")
 
-        streak_u1 = get_developer_streak(db, u1.id)
-        streak_u2 = get_developer_streak(db, u2.id)
+        streak_u1 = get_developer_streak(db, u1.id, force_refresh=True)
+        streak_u2 = get_developer_streak(db, u2.id, force_refresh=True)
 
         assert streak_u1["current_streak"] == 1
         assert streak_u2["current_streak"] == 0

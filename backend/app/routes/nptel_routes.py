@@ -102,7 +102,7 @@ def nptel_status(
         user_cache.set(user_id, "platform_status:nptel", res, ttl=30)
         return res
 
-    profile_url = connection.profile_url or "https://nptel.ac.in"
+    profile_url = connection.profile_url
 
     res = {
         "connected": True,
@@ -143,7 +143,7 @@ def nptel_profile(
             detail="NPTEL account is not connected",
         )
 
-    profile_url = connection.profile_url or "https://nptel.ac.in"
+    profile_url = connection.profile_url
 
     return {
         "username": connection.nptel_username,

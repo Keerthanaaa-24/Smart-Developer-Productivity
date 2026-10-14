@@ -53,16 +53,26 @@ API.interceptors.request.use(
       if (inFlightRequests.has(key)) {
         config.adapter = () => inFlightRequests.get(key);
       } else {
-        const defaultAdapter = config.adapter || axios.defaults.adapter;
-        config.adapter = async (cfg) => {
-          const promise = defaultAdapter(cfg);
-          inFlightRequests.set(key, promise);
-          try {
-            return await promise;
-          } finally {
-            inFlightRequests.delete(key);
-          }
-        };
+        let defaultAdapter = null;
+        try {
+          defaultAdapter = axios.getAdapter
+            ? axios.getAdapter(config.adapter || axios.defaults.adapter)
+            : (typeof config.adapter === "function" ? config.adapter : null);
+        } catch {
+          defaultAdapter = null;
+        }
+
+        if (typeof defaultAdapter === "function") {
+          config.adapter = async (cfg) => {
+            const promise = defaultAdapter(cfg);
+            inFlightRequests.set(key, promise);
+            try {
+              return await promise;
+            } finally {
+              inFlightRequests.delete(key);
+            }
+          };
+        }
       }
     }
 

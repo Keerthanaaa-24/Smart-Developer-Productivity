@@ -46,7 +46,7 @@ export const checkBackendHealth = async (retries = 2, delayMs = 1500) => {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const response = await API.get("/health/ready", {
-        timeout: 7000,
+        timeout: 9000,
         skipDeduplication: true,
       });
       if (response.data?.database === "connected" || response.status === 200) {
