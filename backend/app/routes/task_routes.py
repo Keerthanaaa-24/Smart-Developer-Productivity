@@ -1,7 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -62,13 +59,17 @@ def add_task(
 
 @router.get("/")
 def all_tasks(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
 
     tasks = get_tasks(
         db,
-        current_user.id
+        current_user.id,
+        limit=limit,
+        offset=offset,
     )
 
     return [serialize_task(t) for t in tasks]

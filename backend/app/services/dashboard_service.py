@@ -931,7 +931,7 @@ def get_dashboard_overview(db: Session, user_id: int, force_refresh: bool = Fals
     ml_prediction = None
     try:
         from app.services.ml_service import ml_productivity_service
-        ml_prediction = ml_productivity_service.predict_for_user(db, user_id, save_to_db=True)
+        ml_prediction = ml_productivity_service.predict_for_user(db, user_id, save_to_db=False)
     except Exception as ml_err:
         import logging
         logging.getLogger("uvicorn.error").warning(f"ML prediction overview hook warning: {ml_err}")

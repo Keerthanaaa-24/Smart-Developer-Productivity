@@ -173,10 +173,15 @@ export const BackendStatusProvider = ({ children }) => {
     elapsedTimerRef.current = setInterval(() => {
       setElapsed((prev) => {
         const next = prev + 1;
-        // Bounded: Cap counter at 45 seconds
+        // Bounded: Stop timer and auto-dismiss after 45 seconds so banner does not stay permanently
         if (next >= 45) {
           if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
           if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+          setTimeout(() => {
+            if (statusRef.current === "cold_start") {
+              setAppStatus("idle");
+            }
+          }, 4000);
         }
         return next;
       });
@@ -185,7 +190,10 @@ export const BackendStatusProvider = ({ children }) => {
     // Schedule controlled, bounded poll (max 3 attempts: 3s, 6s, 10s)
     const scheduleNextPoll = () => {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-      if (pollAttemptRef.current >= 3) return; // Stop after 3 auto-attempts
+      if (pollAttemptRef.current >= 3) {
+        setMessage("Server is waking up. Click Retry to connect.");
+        return;
+      }
 
       const delays = [3000, 6000, 10000];
       const delay = delays[pollAttemptRef.current] || 10000;
@@ -194,8 +202,12 @@ export const BackendStatusProvider = ({ children }) => {
       pollTimerRef.current = setTimeout(async () => {
         if (statusRef.current !== "cold_start") return;
         const result = await checkHealth();
-        if (!result.ok && statusRef.current === "cold_start" && pollAttemptRef.current < 3) {
-          scheduleNextPoll();
+        if (!result.ok && statusRef.current === "cold_start") {
+          if (pollAttemptRef.current < 3) {
+            scheduleNextPoll();
+          } else {
+            setMessage("Server is taking longer than usual. Click Retry to check again.");
+          }
         }
       }, delay);
     };

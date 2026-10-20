@@ -67,55 +67,21 @@ from app.routes.career_impact_routes import router as career_impact_router
 
 
 # =====================================================
-# BACKGROUND SCHEDULER (LIFESPAN)
+# APPLICATION LIFESPAN
 # =====================================================
 
-import asyncio
 from contextlib import asynccontextmanager
-from app.core.database import SessionLocal
-from app.services.notification_service import notification_service
-
-
-async def _periodic_notification_worker():
-    """Background worker that periodically updates dynamic notifications every 15 minutes."""
-    while True:
-        try:
-            await asyncio.sleep(900)  # 15 minutes
-            db = SessionLocal()
-            try:
-                users = db.query(User.id).all()
-                for (u_id,) in users:
-                    try:
-                        notification_service.generate_dynamic_notifications(db, u_id)
-                    except Exception:
-                        pass
-            finally:
-                db.close()
-        except asyncio.CancelledError:
-            break
-        except Exception:
-            await asyncio.sleep(60)
-
-
 from app.core.schema_sync import sync_database_schema
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Automated Schema Reconciliation (Tables & Missing Columns)
+    # Fast lightweight schema verification
     try:
         sync_database_schema(target_engine=engine)
     except Exception as e:
         import logging
-        logging.getLogger("uvicorn.error").warning(f"Schema sync warning: {e}")
-
-    # Start background notification task
-    task = asyncio.create_task(_periodic_notification_worker())
+        logging.getLogger("uvicorn.error").warning(f"Schema sync notice: {e}")
     yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
 
 
 # =====================================================

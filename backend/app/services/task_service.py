@@ -33,12 +33,16 @@ def create_task(
 
 def get_tasks(
     db: Session,
-    user_id: int
+    user_id: int,
+    limit: int | None = None,
+    offset: int = 0,
 ):
-
-    return db.query(Task).filter(
-        Task.user_id == user_id
-    ).all()
+    query = db.query(Task).filter(Task.user_id == user_id).order_by(Task.id.desc())
+    if offset > 0:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+    return query.all()
 
 
 def get_task_by_id(

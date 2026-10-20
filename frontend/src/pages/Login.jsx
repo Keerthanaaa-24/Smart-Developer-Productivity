@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import AuthLayout from "../layouts/AuthLayout";
-import { loginUser, checkBackendHealth } from "../api/authApi";
+import { loginUser } from "../api/authApi";
 import useAuth from "../hooks/useAuth";
 
 const Login = () => {
@@ -12,43 +12,50 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [isTimeoutError, setIsTimeoutError] = useState(false);
-  const [serverStatus, setServerStatus] = useState("checking"); // 'checking' | 'ready' | 'waking'
+  const [serverStatus, setServerStatus] = useState("idle"); // 'idle' | 'ready' | 'waking'
 
   const [formData, setFormData] = useState({
     username: "",
     password: "",
   });
 
-  // Proactively pre-warm backend on component mount (safe idempotent GET /health)
+  // Listen for backend connection status events
   useEffect(() => {
     let isMounted = true;
-    checkBackendHealth()
-      .then((res) => {
-        if (!isMounted) return;
-        if (res.ok) {
-          setServerStatus("ready");
-        } else {
-          setServerStatus("waking");
-        }
-      })
-      .catch(() => {
-        if (isMounted) setServerStatus("waking");
-      });
+    let autoDismissTimer = null;
 
     const handleColdStart = () => {
-      if (isMounted) setServerStatus("waking");
+      if (isMounted) {
+        setServerStatus("waking");
+        if (autoDismissTimer) clearTimeout(autoDismissTimer);
+        autoDismissTimer = setTimeout(() => {
+          if (isMounted) setServerStatus("idle");
+        }, 12000);
+      }
     };
 
     const handleWarmed = () => {
-      if (isMounted) setServerStatus("ready");
+      if (isMounted) setServerStatus("idle");
+    };
+
+    const handleReport = (event) => {
+      const s = event.detail?.status;
+      if (s === "ready" || s === "idle") {
+        if (isMounted) setServerStatus("idle");
+      } else if (s === "cold_start") {
+        handleColdStart();
+      }
     };
 
     window.addEventListener("backend-cold-start", handleColdStart);
     window.addEventListener("backend-warmed", handleWarmed);
+    window.addEventListener("backend-status-report", handleReport);
     return () => {
       isMounted = false;
+      if (autoDismissTimer) clearTimeout(autoDismissTimer);
       window.removeEventListener("backend-cold-start", handleColdStart);
       window.removeEventListener("backend-warmed", handleWarmed);
+      window.removeEventListener("backend-status-report", handleReport);
     };
   }, []);
 
@@ -111,12 +118,16 @@ const Login = () => {
           "The server is taking longer than expected to respond (backend may be spinning up from idle state). Please try again in a moment."
         );
       } else if (error.response?.status === 401) {
+        setServerStatus("idle");
         setErrorMsg("Invalid username/email or password.");
       } else if (error.response?.status === 500) {
+        setServerStatus("idle");
         setErrorMsg("Internal server error occurred. Please try again shortly.");
       } else if (error.friendlyMessage) {
+        setServerStatus("idle");
         setErrorMsg(error.friendlyMessage);
       } else {
+        setServerStatus("idle");
         let detail = error.response?.data?.detail;
         if (Array.isArray(detail)) {
           detail = detail.map((err) => err.msg || JSON.stringify(err)).join(", ");
@@ -141,12 +152,22 @@ const Login = () => {
       {serverStatus === "waking" && (
         <div
           id="backend-waking-banner"
-          className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2"
+          className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-2 shadow-sm"
         >
-          <span className="animate-pulse text-base">⚡</span>
-          <span>
-            Backend service is waking up from idle state. Requests may take a moment to initialize.
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="animate-pulse text-base">⚡</span>
+            <span>
+              Backend service is waking up from idle state. Requests may take a moment to initialize.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setServerStatus("idle")}
+            className="text-amber-700 hover:text-amber-950 font-bold px-1.5 py-0.5 rounded cursor-pointer"
+            title="Dismiss status banner"
+          >
+            ✕
+          </button>
         </div>
       )}
 

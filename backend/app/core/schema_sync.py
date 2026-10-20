@@ -65,22 +65,19 @@ def _ensure_migration_table(conn, dialect_name: str) -> None:
     conn.commit()
 
 
-def sync_database_schema(target_engine: Engine = None) -> int:
+def sync_database_schema(target_engine: Engine = None, force: bool = False) -> int:
     """
     Compares all registered SQLAlchemy models with live database tables.
+    Fast-path: Checks schema_migrations table; if MIGRATION_VERSION was already verified,
+    skips expensive remote table/column inspection.
+    Otherwise:
     1. Runs Base.metadata.create_all to create missing tables.
     2. Inspects existing tables and executes ALTER TABLE ADD COLUMN for missing columns.
     3. Validates that all model columns exist after synchronization.
     Raises RuntimeError if any model column is still missing after migration.
     """
     eng = target_engine or engine
-    logger.info("[SchemaSync] Beginning automated database schema reconciliation...")
-
-    # 1. Create wholly missing tables first
-    try:
-        Base.metadata.create_all(bind=eng)
-    except Exception as e:
-        logger.warning(f"[SchemaSync] Notice during Base.metadata.create_all: {e}")
+    logger.info("[SchemaSync] Beginning database schema verification...")
 
     added_columns_count = 0
     dialect = eng.dialect
@@ -93,8 +90,29 @@ def sync_database_schema(target_engine: Engine = None) -> int:
             return 0
 
         try:
-            # 2. Ensure migration history table exists
+            # 1. Ensure migration history table exists
             _ensure_migration_table(conn, dialect_name)
+
+            # Fast-path check: if this version was already applied and verified, skip expensive table inspection
+            if not force:
+                try:
+                    row = conn.execute(
+                        text("SELECT 1 FROM schema_migrations WHERE version = :ver"),
+                        {"ver": MIGRATION_VERSION},
+                    ).scalar()
+                    if row:
+                        logger.info(
+                            f"[SchemaSync] Schema version '{MIGRATION_VERSION}' is verified up-to-date. Startup sync complete."
+                        )
+                        return 0
+                except Exception as chk_err:
+                    logger.debug(f"[SchemaSync] Migration check notice: {chk_err}")
+
+            # 2. Create wholly missing tables first
+            try:
+                Base.metadata.create_all(bind=eng)
+            except Exception as e:
+                logger.warning(f"[SchemaSync] Notice during Base.metadata.create_all: {e}")
 
             inspector = inspect(eng)
             existing_tables = set(inspector.get_table_names())

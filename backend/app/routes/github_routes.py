@@ -1058,6 +1058,8 @@ def _sync_github_calendar_background(user_id: int, github_username: str, days: l
     """
     if not days:
         return
+    if user_cache.get(user_id, "cal_synced"):
+        return
     today = datetime.utcnow().date()
     valid_days = []
     for day in days:
@@ -1116,8 +1118,12 @@ def _sync_github_calendar_background(user_id: int, github_username: str, days: l
 
         if new_activities:
             db.add_all(new_activities)
-        db.commit()
-        user_cache.invalidate_user(user_id)
+            db.commit()
+            user_cache.invalidate_user(user_id, namespace="overview")
+            user_cache.invalidate_user(user_id, namespace="stats")
+        else:
+            db.commit()
+        user_cache.set(user_id, "cal_synced", True, ttl=1800)
     except Exception as exc:
         db.rollback()
     finally:

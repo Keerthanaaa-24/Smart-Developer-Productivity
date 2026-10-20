@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -38,10 +38,18 @@ class ProjectUpdateRequest(BaseModel):
 @router.get("")
 def list_projects(
     include_archived: bool = False,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return get_user_projects(db, current_user.id, include_archived=include_archived)
+    return get_user_projects(
+        db,
+        current_user.id,
+        include_archived=include_archived,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("")

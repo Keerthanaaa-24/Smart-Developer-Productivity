@@ -32,12 +32,24 @@ def create_project(
     return project
 
 
-def get_user_projects(db: Session, user_id: int, include_archived: bool = False) -> list[dict]:
+def get_user_projects(
+    db: Session,
+    user_id: int,
+    include_archived: bool = False,
+    limit: int | None = None,
+    offset: int = 0,
+) -> list[dict]:
     query = db.query(Project).filter(Project.user_id == user_id)
     if not include_archived:
         query = query.filter(Project.status != "Archived")
     
-    projects = query.order_by(desc(Project.updated_at)).all()
+    query = query.order_by(desc(Project.updated_at))
+    if offset > 0:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+
+    projects = query.all()
     if not projects:
         return []
     

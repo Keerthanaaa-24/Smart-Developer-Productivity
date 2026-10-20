@@ -171,6 +171,24 @@ API.interceptors.response.use(
     const isColdStartStatus = status === 502 || status === 504 || (status === 503 && !isDbUnavailable);
     const isGenuineColdStart = isTimeout || isColdStartStatus || isNetworkError;
 
+    // Determine if safe for single cold-start retry
+    // ONLY safe idempotent GET requests are retried automatically.
+    // POST, PUT, DELETE, and auth/oauth mutations are NEVER blindly retried.
+    const isSafeGet = method === "get";
+    const isOAuthFlow =
+      url.includes("/oauth") ||
+      url.includes("/github/login") ||
+      url.includes("/github/callback");
+
+    if (isSafeGet && !isOAuthFlow && isGenuineColdStart && !config._retry) {
+      config._retry = true;
+      console.info(`[Render Cold-Start] Retrying safe GET request once: ${url}`);
+      // Wait 1.5s before single retry
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      return API(config);
+    }
+
+    // Only dispatch UI status alert after allowed retry has failed or for non-retryable requests
     if (isDbUnavailable && typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("backend-status-report", {
@@ -190,23 +208,6 @@ API.interceptors.response.use(
           detail: { status: "error", message: "Application server error" },
         })
       );
-    }
-
-    // Determine if safe for single cold-start retry
-    // ONLY safe idempotent GET requests are retried automatically.
-    // POST, PUT, DELETE, and auth/oauth mutations are NEVER blindly retried.
-    const isSafeGet = method === "get";
-    const isOAuthFlow =
-      url.includes("/oauth") ||
-      url.includes("/github/login") ||
-      url.includes("/github/callback");
-
-    if (isSafeGet && !isOAuthFlow && isGenuineColdStart && !config._retry) {
-      config._retry = true;
-      console.info(`[Render Cold-Start] Retrying safe GET request: ${url}`);
-      // Wait 1.5s before retry
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      return API(config);
     }
 
     // 3. User-Friendly Error Classification

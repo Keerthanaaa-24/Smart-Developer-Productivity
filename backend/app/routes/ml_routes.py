@@ -315,20 +315,21 @@ def get_model_status() -> Dict[str, Any]:
     """
     try:
         predictor = get_productivity_predictor()
+        algo_name = "RandomForestRegressor" if getattr(predictor, "is_model_loaded", False) else "Rule-Based Productivity Evaluator (Fallback)"
         return {
             "status": "active",
-            "algorithm": "RandomForestRegressor",
+            "algorithm": algo_name,
             "model_version": predictor.model_version,
             "metrics": predictor.metrics,
             "operational_status": "operational",
             "active_models": [
                 {
                     "name": "Developer Productivity Forecaster & Intelligence Engine",
-                    "algorithm": "RandomForestRegressor",
+                    "algorithm": algo_name,
                     "version": predictor.model_version,
                     "metrics": predictor.metrics,
                     "features_count": len(predictor.final_features),
-                    "status": "active",
+                    "status": "active" if getattr(predictor, "is_model_loaded", False) else "active (rule-based fallback)",
                 },
                 {
                     "name": "Career Readiness & Milestone Engine",

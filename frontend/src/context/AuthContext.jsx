@@ -83,6 +83,11 @@ const AuthProvider = ({ children }) => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("user");
     localStorage.removeItem("profile");
+    try {
+      sessionStorage.clear();
+    } catch {
+      // Ignore
+    }
     setUser(null);
   };
 
