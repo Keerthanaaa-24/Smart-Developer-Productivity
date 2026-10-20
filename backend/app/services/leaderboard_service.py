@@ -8,7 +8,7 @@ from app.models.user_settings import UserSettings
 from app.models.point_transaction import PointTransaction
 from app.models.student_achievement import StudentAchievement
 from app.models.developer_activity import DeveloperActivity
-from app.services.points_service import calculate_level_info
+from app.services.points_service import calculate_level_info, sync_verified_points_for_user
 from app.core.cache import user_cache
 
 logger = logging.getLogger("uvicorn.error")
@@ -102,6 +102,10 @@ def get_leaderboard(
         .outerjoin(pt_subq, pt_subq.c.user_id == User.id)
         .outerjoin(ach_subq, ach_subq.c.user_id == User.id)
         .outerjoin(act_subq, act_subq.c.user_id == User.id)
+        .filter(
+            ~User.email.like("%@example.com"),
+            ~User.email.like("%@test.com"),
+        )
     )
 
     # Apply search filter if provided
@@ -192,6 +196,15 @@ def get_student_leaderboard_position(
     period_lower = (period or "all_time").lower().strip()
     since_dt = _get_period_filter_clause(period_lower)
 
+    # Reconcile verified historical actions if no points ledger transactions exist yet
+    has_points = (
+        db.query(PointTransaction.id)
+        .filter(PointTransaction.user_id == user_id)
+        .first()
+    )
+    if not has_points:
+        sync_verified_points_for_user(db, user_id)
+
     # 1. Get current user's period points
     my_pt_q = db.query(func.coalesce(func.sum(PointTransaction.points), 0)).filter(
         PointTransaction.user_id == user_id
@@ -228,13 +241,15 @@ def get_student_leaderboard_position(
         .subquery()
     )
 
-    # Count competitors ahead
+    # Count eligible competitors ahead
     ahead_count = (
         db.query(User.id)
         .outerjoin(pt_subq, pt_subq.c.user_id == User.id)
         .outerjoin(act_subq, act_subq.c.user_id == User.id)
         .filter(
             User.id != user_id,
+            ~User.email.like("%@example.com"),
+            ~User.email.like("%@test.com"),
             or_(
                 func.coalesce(pt_subq.c.pts, 0) > my_points,
                 and_(
@@ -252,7 +267,14 @@ def get_student_leaderboard_position(
     )
 
     my_rank = ahead_count + 1
-    total_students = db.query(User).count()
+    total_students = (
+        db.query(User)
+        .filter(
+            ~User.email.like("%@example.com"),
+            ~User.email.like("%@test.com"),
+        )
+        .count()
+    )
 
     # User profile & achievements
     user = db.query(User).filter(User.id == user_id).first()

@@ -136,6 +136,121 @@ def award_points(
         return None
 
 
+def sync_verified_points_for_user(db: Session, user_id: int) -> int:
+    """
+    Safely reconciles verified historical database records with the point ledger.
+    Guarantees:
+    - Only completed tasks (status='Completed') are credited (+10 pts each).
+    - Only genuine qualifying focus Pomodoro sessions (status='completed', duration >= 900s) are credited (+5 pts each).
+    - Only completed projects (status='Completed') are credited (+10 pts each).
+    - Only registered student achievements are credited.
+    - Idempotent: Database UniqueConstraint('user_id', 'source_type', 'source_id')
+      ensures zero duplicate points can ever be generated.
+    """
+    from app.models.task import Task
+    from app.models.pomodoro_session import PomodoroSession
+    from app.models.project import Project
+    from app.models.student_achievement import StudentAchievement
+
+    before_count = (
+        db.query(PointTransaction.id)
+        .filter(PointTransaction.user_id == user_id)
+        .count()
+    )
+
+    # 1. Verified Completed Tasks
+    try:
+        completed_tasks = (
+            db.query(Task)
+            .filter(Task.user_id == user_id, Task.status == "Completed")
+            .all()
+        )
+        for t in completed_tasks:
+            award_points(
+                db=db,
+                user_id=user_id,
+                source_type="task",
+                source_id=f"task_{t.id}",
+                points=SCORING_POLICY["task_completed"],
+                category="productivity",
+                description=f"Completed task: {t.title}",
+            )
+    except Exception as e:
+        logger.warning(f"Task points reconciliation notice: {e}")
+
+    # 2. Verified Completed Pomodoro Focus Sessions (>= 15 mins)
+    try:
+        completed_pomos = (
+            db.query(PomodoroSession)
+            .filter(
+                PomodoroSession.user_id == user_id,
+                PomodoroSession.session_type == "focus",
+                PomodoroSession.status == "completed",
+                PomodoroSession.actual_duration_seconds >= 900,
+            )
+            .all()
+        )
+        for p in completed_pomos:
+            award_points(
+                db=db,
+                user_id=user_id,
+                source_type="pomodoro",
+                source_id=f"pomo_{p.id}",
+                points=SCORING_POLICY["pomodoro_completed"],
+                category="productivity",
+                description=f"Completed {p.actual_duration_seconds // 60}m focus session",
+            )
+    except Exception as e:
+        logger.warning(f"Pomodoro points reconciliation notice: {e}")
+
+    # 3. Verified Completed Projects
+    try:
+        completed_projects = (
+            db.query(Project)
+            .filter(Project.user_id == user_id, Project.status == "Completed")
+            .all()
+        )
+        for pr in completed_projects:
+            award_points(
+                db=db,
+                user_id=user_id,
+                source_type="project",
+                source_id=f"proj_{pr.id}",
+                points=SCORING_POLICY["project_milestone"],
+                category="projects",
+                description=f"Project milestone: {pr.name}",
+            )
+    except Exception as e:
+        logger.warning(f"Project points reconciliation notice: {e}")
+
+    # 4. Registered Achievements
+    try:
+        achs = (
+            db.query(StudentAchievement)
+            .filter(StudentAchievement.user_id == user_id)
+            .all()
+        )
+        for a in achs:
+            award_points(
+                db=db,
+                user_id=user_id,
+                source_type="achievement",
+                source_id=f"ach_{a.id}",
+                points=a.points_awarded,
+                category="achievements",
+                description=f"Achievement: {a.title}",
+            )
+    except Exception as e:
+        logger.warning(f"Achievement points reconciliation notice: {e}")
+
+    after_count = (
+        db.query(PointTransaction.id)
+        .filter(PointTransaction.user_id == user_id)
+        .count()
+    )
+    return max(0, after_count - before_count)
+
+
 def get_user_points_summary(db: Session, user_id: int) -> dict:
     """
     Returns an auditable breakdown of student productivity points:
@@ -144,6 +259,15 @@ def get_user_points_summary(db: Session, user_id: int) -> dict:
     cached = user_cache.get(user_id, "user_points_summary")
     if cached is not None:
         return cached
+
+    # Reconcile verified historical actions if no points ledger transactions exist yet
+    has_points = (
+        db.query(PointTransaction.id)
+        .filter(PointTransaction.user_id == user_id)
+        .first()
+    )
+    if not has_points:
+        sync_verified_points_for_user(db, user_id)
 
     # 1. Total points
     total_points = (
