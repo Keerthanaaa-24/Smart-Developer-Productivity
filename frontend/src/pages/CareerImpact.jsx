@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import {
   FaChartLine,
   FaClock,
@@ -13,6 +14,10 @@ import {
   FaRocket,
   FaCode,
   FaFolder,
+  FaRedo,
+  FaExclamationTriangle,
+  FaPlus,
+  FaPlay,
 } from "react-icons/fa";
 import MainLayout from "../layouts/MainLayout";
 import careerImpactApi from "../api/careerImpactApi";
@@ -22,23 +27,35 @@ const CareerImpact = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchReport = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await careerImpactApi.getCareerImpactReport();
-        setReport(data);
-      } catch (err) {
-        console.error("Failed to load career impact report:", err);
-        setError("Failed to generate Career Impact report.");
-      } finally {
-        setLoading(false);
+  const fetchReport = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await careerImpactApi.getCareerImpactReport();
+      setReport(data);
+    } catch (err) {
+      console.error("Failed to load career impact report:", err);
+      let msg = "Failed to generate Career Impact report.";
+      if (err.response?.data?.detail) {
+        msg =
+          typeof err.response.data.detail === "string"
+            ? err.response.data.detail
+            : JSON.stringify(err.response.data.detail);
+      } else if (err.friendlyMessage) {
+        msg = err.friendlyMessage;
+      } else if (err.message && err.message.toLowerCase().includes("timeout")) {
+        msg =
+          "The backend service took longer than expected to respond (it may be waking up from idle state). Please try again.";
       }
-    };
-
-    fetchReport();
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchReport();
+  }, [fetchReport]);
 
   if (loading) {
     return (
@@ -63,27 +80,53 @@ const CareerImpact = () => {
   if (error || !report) {
     return (
       <MainLayout>
-        <div className="max-w-xl mx-auto my-12 p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-4 shadow-xl">
-          <div className="w-14 h-14 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-2xl mx-auto">
-            <FaShieldAlt />
+        <div className="max-w-xl mx-auto my-12 p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-5 shadow-xl">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-2xl mx-auto">
+            <FaExclamationTriangle />
           </div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Impact Report Unavailable</h2>
-          <p className="text-xs text-slate-500 leading-relaxed">{error || "Insufficient telemetry data."}</p>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              Impact Report Unavailable
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mt-2 max-w-md mx-auto">
+              {error || "Insufficient telemetry data available to generate report."}
+            </p>
+          </div>
+          <div className="pt-2 flex justify-center">
+            <button
+              id="retry-career-impact-btn"
+              type="button"
+              onClick={fetchReport}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-semibold text-xs transition-all shadow-md shadow-blue-500/20 cursor-pointer disabled:opacity-50"
+            >
+              <FaRedo className={loading ? "animate-spin" : ""} />
+              {loading ? "Re-generating..." : "Retry Report"}
+            </button>
+          </div>
         </div>
       </MainLayout>
     );
   }
 
   const {
-    period,
-    focus_metrics,
-    task_velocity,
-    learning_and_coding,
-    project_growth,
-    career_readiness_evolution,
-    skill_gap_summary,
-    personalized_next_steps,
+    is_empty: backendIsEmpty = false,
+    period = {},
+    focus_metrics = {},
+    task_velocity = {},
+    learning_and_coding = {},
+    project_growth = {},
+    career_readiness_evolution = {},
+    skill_gap_summary = {},
+    personalized_next_steps = [],
   } = report;
+
+  const isEmpty =
+    backendIsEmpty ||
+    ((task_velocity.total_tasks || 0) === 0 &&
+      (focus_metrics.total_focus_hours_30d || 0) === 0 &&
+      (learning_and_coding.total_activities_90d || 0) === 0 &&
+      (project_growth.total_projects || 0) === 0);
 
   return (
     <MainLayout>
@@ -112,10 +155,55 @@ const CareerImpact = () => {
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-4 py-2 rounded-2xl border border-slate-200/60 dark:border-slate-700/60">
             <FaCalendarAlt className="text-blue-500" />
             <span>
-              {period.start_date} to {period.end_date} ({period.active_observation_days} active days)
+              {period.start_date || "30 Days"} to {period.end_date || "Today"} (
+              {period.active_observation_days || 0} active days)
             </span>
           </div>
         </div>
+
+        {/* EMPTY STATE BANNER (IF NO TELEMETRY RECORDED YET) */}
+        {isEmpty && (
+          <div
+            id="career-impact-empty-state"
+            className="p-6 md:p-8 rounded-3xl bg-gradient-to-r from-blue-500/10 via-indigo-500/5 to-purple-500/10 border border-blue-200/80 dark:border-blue-800/60 shadow-sm space-y-4"
+          >
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-blue-600/15 text-blue-600 dark:text-blue-400 flex items-center justify-center text-2xl shrink-0">
+                  <FaRocket />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    No Recorded Telemetry Yet — Start Building Your Impact
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                    This report synthesizes real, verifiable developer milestones across Pomodoro deep-work focus sessions, task throughput, GitHub commits, and structured learning. Complete your first focus session or task to see your real impact metrics evolve!
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <Link
+                  to="/pomodoro"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition-all shadow-sm shadow-blue-500/20"
+                >
+                  <FaPlay className="text-[10px]" /> Start Focus Session
+                </Link>
+                <Link
+                  to="/tasks"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-semibold text-xs transition-all"
+                >
+                  <FaPlus className="text-[10px]" /> Add a Task
+                </Link>
+                <Link
+                  to="/projects"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-semibold text-xs transition-all"
+                >
+                  <FaFolder className="text-[10px]" /> Add Project
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 4 PRIMARY IMPACT KPI CARDS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -188,17 +276,19 @@ const CareerImpact = () => {
                 <FaShieldAlt className="text-indigo-500" /> Career Readiness
               </span>
               <span className="text-indigo-600 dark:text-indigo-400 font-bold">
-                +{career_readiness_evolution.delta} pts
+                {(career_readiness_evolution.delta || 0) >= 0
+                  ? `+${career_readiness_evolution.delta || 0}`
+                  : career_readiness_evolution.delta} pts
               </span>
             </div>
             <div className="flex items-baseline gap-2 pt-1">
               <span className="text-3xl font-black text-slate-900 dark:text-white">
-                {career_readiness_evolution.current_score}%
+                {career_readiness_evolution.current_score || 0}%
               </span>
               <span className="text-xs text-slate-500 font-bold">readiness index</span>
             </div>
             <span className="text-[11px] text-slate-400 block">
-              Prior 30d baseline: {career_readiness_evolution.prior_30d_score}%
+              Prior 30d baseline: {career_readiness_evolution.prior_30d_score || 0}%
             </span>
           </div>
         </div>
@@ -221,8 +311,11 @@ const CareerImpact = () => {
             {/* BARS */}
             <div className="grid grid-cols-4 gap-4 pt-4">
               {focus_metrics.weekly_trends?.map((w, idx) => {
-                const maxHours = Math.max(...focus_metrics.weekly_trends.map((t) => t.focus_hours), 10);
-                const heightPct = Math.min(100, Math.max(15, Math.round((w.focus_hours / maxHours) * 100)));
+                const maxHours = Math.max(
+                  ...(focus_metrics.weekly_trends || []).map((t) => t.focus_hours || 0),
+                  10
+                );
+                const heightPct = Math.min(100, Math.max(15, Math.round(((w.focus_hours || 0) / maxHours) * 100)));
                 return (
                   <div key={idx} className="flex flex-col items-center gap-3">
                     <span className="text-xs font-black text-slate-900 dark:text-white">
@@ -329,13 +422,13 @@ const CareerImpact = () => {
               <div className="flex items-center justify-between text-slate-500">
                 <span>Completed Projects:</span>
                 <span className="font-bold text-slate-800 dark:text-slate-200">
-                  {project_growth.completed_projects} / {project_growth.total_projects}
+                  {project_growth.completed_projects || 0} / {project_growth.total_projects || 0}
                 </span>
               </div>
               <div className="flex items-center justify-between text-slate-500">
                 <span>Recommendations Resolved:</span>
                 <span className="font-bold text-emerald-600">
-                  {skill_gap_summary.recommendations_completed} completed
+                  {skill_gap_summary.recommendations_completed || 0} completed
                 </span>
               </div>
             </div>

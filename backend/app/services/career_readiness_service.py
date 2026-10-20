@@ -42,20 +42,26 @@ class CareerReadinessService:
         ).all()
         activities = db.query(DeveloperActivity).filter(DeveloperActivity.user_id == user_id).all()
 
-        gh = db.query(GitHubConnection).filter(GitHubConnection.user_id == user_id).first()
-        lc = db.query(LeetCodeConnection).filter(LeetCodeConnection.user_id == user_id).first()
-        co = db.query(CourseraConnection).filter(CourseraConnection.user_id == user_id).first()
-        nptel = db.query(NPTELConnection).filter(NPTELConnection.user_id == user_id).first()
-        gfg = db.query(GeeksForGeeksConnection).filter(GeeksForGeeksConnection.user_id == user_id).first()
-        fcc = db.query(FreeCodeCampConnection).filter(FreeCodeCampConnection.user_id == user_id).first()
-        li = db.query(LinkedInConnection).filter(LinkedInConnection.user_id == user_id).first()
-        settings = None
-        try:
-            settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
-        except Exception as e:
-            import logging
-            logging.getLogger("uvicorn.error").warning(f"[CareerReadiness] Could not load UserSettings for user {user_id}: {e}")
-            db.rollback()
+        def _safe_first(query_fn):
+            try:
+                return query_fn()
+            except Exception as exc:
+                import logging
+                logging.getLogger("uvicorn.error").warning(f"[CareerReadiness] Query notice: {exc}")
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                return None
+
+        gh = _safe_first(lambda: db.query(GitHubConnection).filter(GitHubConnection.user_id == user_id).first())
+        lc = _safe_first(lambda: db.query(LeetCodeConnection).filter(LeetCodeConnection.user_id == user_id).first())
+        co = _safe_first(lambda: db.query(CourseraConnection).filter(CourseraConnection.user_id == user_id).first())
+        nptel = _safe_first(lambda: db.query(NPTELConnection).filter(NPTELConnection.user_id == user_id).first())
+        gfg = _safe_first(lambda: db.query(GeeksForGeeksConnection).filter(GeeksForGeeksConnection.user_id == user_id).first())
+        fcc = _safe_first(lambda: db.query(FreeCodeCampConnection).filter(FreeCodeCampConnection.user_id == user_id).first())
+        li = _safe_first(lambda: db.query(LinkedInConnection).filter(LinkedInConnection.user_id == user_id).first())
+        settings = _safe_first(lambda: db.query(UserSettings).filter(UserSettings.user_id == user_id).first())
 
         # 2. Extract Evidence Metrics
 
