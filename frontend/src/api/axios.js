@@ -4,13 +4,15 @@ import axios from "axios";
 // API CONFIGURATION
 // =====================================================
 
+const rawBaseUrl =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV
+    ? "http://127.0.0.1:8001"
+    : "https://smart-developer-productivity.onrender.com");
+
 const API = axios.create({
-  baseURL:
-    import.meta.env.VITE_API_BASE_URL ||
-    import.meta.env.VITE_API_URL ||
-    (import.meta.env.DEV
-      ? "http://127.0.0.1:8001"
-      : "https://smart-developer-productivity.onrender.com"),
+  baseURL: String(rawBaseUrl).replace(/\/+$/, ""),
   timeout: 25000, // 25s timeout for cold-start recovery
   headers: {
     "Content-Type": "application/json",

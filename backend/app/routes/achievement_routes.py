@@ -4,12 +4,13 @@ import logging
 from datetime import datetime, date, timezone
 from typing import Optional
 from pydantic import BaseModel, HttpUrl, Field
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Header, status
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.core.database import get_db
-from app.core.oauth2 import get_current_user
+from app.core.oauth2 import get_current_user, decode_token_user_id
 from app.models.user import User
 from app.models.student_achievement import StudentAchievement
 from app.services.points_service import award_points
@@ -326,3 +327,69 @@ async def upload_certificate_file(
             else "Stored locally on instance filesystem. Configure AWS_S3_BUCKET for permanent multi-region storage across Render dyno restarts."
         ),
     }
+
+
+@router.get("/{achievement_id}/certificate", summary="Download or view certificate file")
+def get_certificate_file(
+    achievement_id: int,
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Secure certificate retrieval endpoint:
+    - If achievement is public (is_public=True), allows retrieval.
+    - If achievement is private (is_public=False), strictly requires authentication
+      and verifies token_user_id == ach.user_id.
+    - Never exposes private certificates through unrestricted URLs.
+    """
+    ach = db.query(StudentAchievement).filter(StudentAchievement.id == achievement_id).first()
+    if not ach:
+        raise HTTPException(status_code=404, detail="Achievement not found")
+
+    if not ach.certificate_url:
+        raise HTTPException(status_code=404, detail="No certificate file has been uploaded for this achievement.")
+
+    # Access control: If achievement is private, strictly require owner authentication
+    if not ach.is_public:
+        auth_token = token
+        if not auth_token and authorization and authorization.lower().startswith("bearer "):
+            auth_token = authorization.split(" ", 1)[1].strip()
+
+        token_user_id = decode_token_user_id(auth_token) if auth_token else None
+        if not token_user_id or token_user_id != ach.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to access this private certificate evidence.",
+            )
+
+    # If external URL (e.g. S3), redirect
+    if ach.certificate_url.startswith("http://") or ach.certificate_url.startswith("https://"):
+        return RedirectResponse(url=ach.certificate_url)
+
+    # Local file path resolution
+    filename = os.path.basename(ach.certificate_url)
+    file_path = os.path.join(LOCAL_UPLOAD_DIR, filename)
+
+    if not os.path.isfile(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certificate file not found on disk. It may need to be re-uploaded.",
+        )
+
+    ext = os.path.splitext(filename)[1].lower()
+    media_type_map = {
+        ".pdf": "application/pdf",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+    }
+    media_type = media_type_map.get(ext, "application/octet-stream")
+
+    return FileResponse(
+        path=file_path,
+        media_type=media_type,
+        filename=filename,
+    )
+

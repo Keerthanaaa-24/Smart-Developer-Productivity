@@ -31,5 +31,5 @@ def get_career_impact_report(
             pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate career impact report: {str(exc)}",
+            detail="Unable to generate career impact report at this time. Please try again later.",
         )

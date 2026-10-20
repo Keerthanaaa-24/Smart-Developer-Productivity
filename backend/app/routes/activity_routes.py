@@ -295,7 +295,7 @@ def get_trust_center_overview(
 
 @router.get("/export")
 def export_user_activity(
-    format: str = Query(default="json", regex="^(json|csv)$"),
+    format: str = Query(default="json", pattern="^(json|csv)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

@@ -1,4 +1,5 @@
 import API from "./axios";
+import { API_BASE_URL } from "../utils/constants";
 
 export const getMyAchievements = async (category = "") => {
   const query = category ? `?category=${encodeURIComponent(category)}` : "";
@@ -37,6 +38,20 @@ export const uploadCertificate = async (id, file) => {
   return response.data;
 };
 
+export const getCertificateUrl = (achievement) => {
+  if (!achievement) return "";
+  const url = achievement.certificate_url || "";
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+  const token =
+    localStorage.getItem("token") || localStorage.getItem("access_token") || "";
+  const authQuery =
+    !achievement.is_public && token ? `?token=${encodeURIComponent(token)}` : "";
+  return `${API_BASE_URL}/achievements/${achievement.id}/certificate${authQuery}`;
+};
+
 const achievementApi = {
   getMyAchievements,
   createAchievement,
@@ -44,6 +59,8 @@ const achievementApi = {
   updateAchievement,
   deleteAchievement,
   uploadCertificate,
+  getCertificateUrl,
 };
 
 export default achievementApi;
+

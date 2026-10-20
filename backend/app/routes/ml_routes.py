@@ -10,6 +10,7 @@ Provides authenticated endpoints for:
 """
 
 from typing import Dict, Any, List, Optional
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -17,6 +18,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.oauth2 import get_current_user
 from app.models.user import User
+
+logger = logging.getLogger("uvicorn.error")
+
 
 from ml.predict import DeveloperActivityInput, get_productivity_predictor
 from app.services.ml_service import ml_productivity_service
@@ -144,9 +148,10 @@ def get_skill_gaps_overview(
             "history": history,
         }
     except Exception as e:
+        logger.error(f"Skill gap overview error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch skill gap overview: {str(e)}",
+            detail="Failed to fetch skill gap overview. Please try again later.",
         )
 
 
@@ -168,9 +173,10 @@ def analyze_skill_gaps(
             save_to_db=True,
         )
     except Exception as e:
+        logger.error(f"Skill gap analysis error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Skill gap analysis failed: {str(e)}",
+            detail="Skill gap analysis could not be completed. Please try again later.",
         )
 
 
@@ -212,9 +218,10 @@ def get_personalized_recommendations(
             "recommendations": recs,
         }
     except Exception as e:
+        logger.error(f"Personalized recommendations error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate recommendations: {str(e)}",
+            detail="Failed to generate recommendations. Please try again later.",
         )
 
 
@@ -268,9 +275,10 @@ def get_my_productivity_prediction(
             save_to_db=True,
         )
     except Exception as e:
+        logger.error(f"ML productivity prediction error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to calculate ML productivity score: {str(e)}",
+            detail="Failed to calculate ML productivity score. Please try again later.",
         )
 
 
@@ -285,9 +293,10 @@ def predict_productivity_custom(
     try:
         return ml_productivity_service.predict_custom_features(input_data)
     except Exception as e:
+        logger.error(f"Productivity custom prediction error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Productivity prediction failed: {str(e)}",
+            detail="Productivity prediction calculation failed. Please try again later.",
         )
 
 
@@ -347,7 +356,8 @@ def get_model_status() -> Dict[str, Any]:
             "data_isolation_policy": "Strict per-user data boundaries",
         }
     except Exception as e:
+        logger.error(f"Model status error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to load model status: {str(e)}",
+            detail="Failed to load model status. Please try again later.",
         )

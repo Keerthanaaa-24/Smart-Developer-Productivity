@@ -363,7 +363,7 @@ const Achievements = () => {
                       )}
                       {ach.certificate_url ? (
                         <a
-                          href={ach.certificate_url}
+                          href={achievementApi.getCertificateUrl(ach)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 hover:bg-purple-100 transition text-xs"

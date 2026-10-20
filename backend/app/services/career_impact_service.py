@@ -240,7 +240,7 @@ class CareerImpactService:
             .all(),
             default=[],
         )
-        latest_skill_match = getattr(skill_analyses[0], "match_percentage", 75.0) if skill_analyses else 75.0
+        latest_skill_match = getattr(skill_analyses[0], "match_percentage", None) if skill_analyses else None
 
         recommendations = _safe_query(
             db,

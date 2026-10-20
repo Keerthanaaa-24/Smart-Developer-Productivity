@@ -125,3 +125,27 @@ def get_current_user(
         raise credentials_exception
 
     return user
+
+
+def decode_token_user_id(token: str) -> int | None:
+    """
+    Decodes a JWT token and returns user_id if valid, or None if expired/invalid.
+    Used for query-param/header-authenticated downloads and media access.
+    """
+    if not token or not isinstance(token, str):
+        return None
+    try:
+        payload = jwt.decode(
+            token.strip(),
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+        )
+        user_id = payload.get("user_id")
+        if user_id is not None:
+            return int(user_id)
+        sub = payload.get("sub")
+        if sub is not None and str(sub).isdigit():
+            return int(sub)
+        return None
+    except Exception:
+        return None
