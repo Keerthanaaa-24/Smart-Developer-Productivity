@@ -198,6 +198,39 @@ def get_developer_streak(
 
     last_active = max(active_dates) if active_dates else None
 
+    # Status reason for student transparency
+    if today in active_dates:
+        status_reason = f"Streak active! Eligible developer activity recorded today on {', '.join(today_platforms)}."
+        # Idempotently award daily active streak bonus points
+        try:
+            from app.services.points_service import award_points
+            award_points(
+                db=db,
+                user_id=user_id,
+                source_type="streak_bonus",
+                source_id=f"streak_{today}",
+                points=2,
+                category="streak",
+                description=f"Active developer streak day bonus ({today})",
+            )
+        except Exception as se:
+            pass
+    elif (today - timedelta(days=1)) in active_dates:
+        status_reason = "Streak preserved from yesterday. Complete a task or focus session today to extend it!"
+    else:
+        status_reason = "No eligible activity recorded recently. Complete a task, pomodoro, or coding practice to begin your streak!"
+
+    # Streak milestones
+    milestones = []
+    if longest_streak >= 3:
+        milestones.append({"days": 3, "title": "3-Day Consistency", "achieved": True})
+    if longest_streak >= 7:
+        milestones.append({"days": 7, "title": "7-Day Sprint Master", "achieved": True})
+    if longest_streak >= 14:
+        milestones.append({"days": 14, "title": "14-Day Deep Worker", "achieved": True})
+    if longest_streak >= 30:
+        milestones.append({"days": 30, "title": "30-Day Code Titan", "achieved": True})
+
     res = {
         "current_streak": current_streak,
         "longest_streak": longest_streak,
@@ -206,6 +239,8 @@ def get_developer_streak(
         "active_platform_count": len(today_platforms),
         "total_active_days": len(active_dates),
         "last_active_date": str(last_active) if last_active else None,
+        "status_reason": status_reason,
+        "milestones": milestones,
     }
     if target_date is None:
         user_cache.set(user_id, "developer_streak", res, ttl=30)

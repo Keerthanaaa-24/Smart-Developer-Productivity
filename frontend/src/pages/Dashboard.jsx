@@ -3,6 +3,7 @@ import MainLayout from "../layouts/MainLayout";
 import API from "../api/axios";
 
 import DashboardHero from "../components/dashboard/DashboardHero";
+import StudentRankWidget from "../components/dashboard/StudentRankWidget";
 import PrimaryFiveMetrics from "../components/dashboard/PrimaryFiveMetrics";
 import MLProductivityCard from "../components/dashboard/MLProductivityCard";
 import ProductivityChart from "../components/dashboard/ProductivityChart";
@@ -115,6 +116,9 @@ const Dashboard = () => {
           onRefresh={() => fetchOverview(true)}
           refreshing={refreshing}
         />
+
+        {/* Student Competition Standings & Arena Widget */}
+        <StudentRankWidget />
 
         {loading && !overview ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">

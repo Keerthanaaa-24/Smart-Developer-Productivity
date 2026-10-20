@@ -24,6 +24,8 @@ from app.models.productivity_forecast import ProductivityForecast
 from app.models.skill_gap_analysis import SkillGapAnalysis
 from app.models.personalized_recommendation import PersonalizedRecommendation
 from app.models.portfolio_profile import PortfolioProfile
+from app.models.point_transaction import PointTransaction
+from app.models.student_achievement import StudentAchievement
 
 __all__ = [
     "User",
@@ -50,6 +52,8 @@ __all__ = [
     "SkillGapAnalysis",
     "PersonalizedRecommendation",
     "PortfolioProfile",
+    "PointTransaction",
+    "StudentAchievement",
 ]
 
 

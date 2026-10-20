@@ -63,6 +63,8 @@ from app.routes.notification_routes import router as notification_router
 from app.routes.ml_routes import router as ml_router
 from app.routes.portfolio_routes import router as portfolio_router
 from app.routes.career_impact_routes import router as career_impact_router
+from app.routes.leaderboard_routes import router as leaderboard_router
+from app.routes.achievement_routes import router as achievement_router
 
 
 
@@ -222,6 +224,21 @@ app.include_router(
 app.include_router(
     career_impact_router
 )
+
+app.include_router(
+    leaderboard_router
+)
+
+app.include_router(
+    achievement_router
+)
+
+# Static file serving for certificate evidence (when local storage is used)
+from fastapi.staticfiles import StaticFiles
+import os
+uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+os.makedirs(os.path.join(uploads_dir, "certificates"), exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 
 # =====================================================

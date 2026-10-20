@@ -144,7 +144,7 @@ const MLProductivityCard = ({ onRefresh }) => {
               <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
                 Machine Learning & Developer Intelligence
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30">
-                  Phase 3 Live
+                  Developer Insights
                 </span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">

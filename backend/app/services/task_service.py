@@ -85,9 +85,10 @@ def update_task(
     db.commit()
     db.refresh(db_task)
 
-    # Log unified activity if task was just marked completed
+    # Log unified activity and award productivity points if task was just marked completed
     if not was_completed and is_now_completed:
         from app.services.unified_activity_service import record_task_completed_activity
+        from app.services.points_service import award_points
         try:
             record_task_completed_activity(
                 db=db,
@@ -96,9 +97,18 @@ def update_task(
                 task_title=db_task.title,
                 priority=db_task.priority or "Medium",
             )
+            award_points(
+                db=db,
+                user_id=user_id,
+                source_type="task",
+                source_id=f"task_{db_task.id}",
+                points=10,
+                category="productivity",
+                description=f"Completed task: {db_task.title}",
+            )
             db.refresh(db_task)
         except Exception as e:
-            print("Task completion activity log error:", e)
+            print("Task completion activity/points log error:", e)
 
     user_cache.invalidate_user(user_id)
     return db_task

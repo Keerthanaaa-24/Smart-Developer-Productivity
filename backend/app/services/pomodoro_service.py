@@ -218,6 +218,22 @@ def complete_pomodoro_session(
         task_title=task_title,
     )
 
+    # Award points if qualifying focus session (at least 15 minutes / 900 seconds)
+    if session.session_type == "focus" and actual_duration_seconds >= 900:
+        from app.services.points_service import award_points
+        try:
+            award_points(
+                db=db,
+                user_id=user_id,
+                source_type="pomodoro",
+                source_id=f"pomo_{session.id}",
+                points=5,
+                category="productivity",
+                description=f"Completed {actual_duration_seconds // 60}m focus session" + (f" on {task_title}" if task_title else ""),
+            )
+        except Exception as pe:
+            print("Pomodoro points award error:", pe)
+
     db.commit()
     db.refresh(session)
     user_cache.invalidate_user(user_id)

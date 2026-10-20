@@ -148,6 +148,24 @@ def record_unified_activity(
     db.add(activity)
     db.commit()
     db.refresh(activity)
+
+    # Award points for genuine coding, problem solving, or learning activities
+    # Exclude tasks and pomodoro to prevent double-counting (handled at their respective source)
+    if activity.platform not in ("tasks", "pomodoro") and activity.category in ("coding", "problem_solving", "learning"):
+        from app.services.points_service import award_points
+        try:
+            award_points(
+                db=db,
+                user_id=user_id,
+                source_type="activity",
+                source_id=f"act_{activity.id}",
+                points=5,
+                category=activity.category or "coding",
+                description=f"{activity.title or 'Activity on ' + str(activity.platform)}",
+            )
+        except Exception as pe:
+            print("Activity points award error:", pe)
+
     user_cache.invalidate_user(user_id)
     return activity
 

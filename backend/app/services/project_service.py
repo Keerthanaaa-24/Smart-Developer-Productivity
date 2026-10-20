@@ -28,6 +28,21 @@ def create_project(
     db.add(project)
     db.commit()
     db.refresh(project)
+
+    from app.services.points_service import award_points
+    try:
+        award_points(
+            db=db,
+            user_id=user_id,
+            source_type="project",
+            source_id=f"proj_{project.id}",
+            points=10,
+            category="projects",
+            description=f"Project milestone: {project.name}",
+        )
+    except Exception as pe:
+        print("Project points award error:", pe)
+
     user_cache.invalidate_user(user_id)
     return project
 

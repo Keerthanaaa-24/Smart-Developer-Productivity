@@ -30,6 +30,8 @@ const GithubIntegration = lazy(() => import("./pages/GithubIntegration"));
 const Portfolio = lazy(() => import("./pages/Portfolio"));
 const PublicPortfolio = lazy(() => import("./pages/PublicPortfolio"));
 const CareerImpact = lazy(() => import("./pages/CareerImpact"));
+const Leaderboard = lazy(() => import("./pages/Leaderboard"));
+const Achievements = lazy(() => import("./pages/Achievements"));
 
 // Responsive route loading skeleton
 const PageLoadingFallback = () => (
@@ -70,6 +72,24 @@ const App = () => {
                   element={
                     <ProtectedRoute>
                       <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/leaderboard"
+                  element={
+                    <ProtectedRoute>
+                      <Leaderboard />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/achievements"
+                  element={
+                    <ProtectedRoute>
+                      <Achievements />
                     </ProtectedRoute>
                   }
                 />

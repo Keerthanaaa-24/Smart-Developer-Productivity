@@ -16,10 +16,11 @@ from datetime import datetime, timezone
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 from app.core.database import Base, engine
+import app.models  # Ensures all models are registered on Base.metadata
 
 logger = logging.getLogger("uvicorn.error")
 
-MIGRATION_VERSION = "2026_10_phase4_schema_sync_v2"
+MIGRATION_VERSION = "2026_10_phase5_competition_v1"
 
 
 def _acquire_advisory_lock(conn, dialect_name: str) -> bool:

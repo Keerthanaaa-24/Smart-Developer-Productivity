@@ -11,6 +11,8 @@ import {
   FaTimes,
   FaUserTie,
   FaChartLine,
+  FaTrophy,
+  FaAward,
 } from "react-icons/fa";
 
 const menuItems = [
@@ -18,6 +20,16 @@ const menuItems = [
     icon: <FaHome />,
     title: "Dashboard",
     path: "/dashboard",
+  },
+  {
+    icon: <FaTrophy />,
+    title: "Leaderboard",
+    path: "/leaderboard",
+  },
+  {
+    icon: <FaAward />,
+    title: "Achievements",
+    path: "/achievements",
   },
   {
     icon: <FaBolt />,
