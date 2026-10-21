@@ -89,18 +89,28 @@ const PlatformTimeTrackingCard = () => {
 
   if (!loading && !data && summaryError) {
     return (
-      <div className="bg-slate-900/40 border border-slate-700/60 rounded-3xl p-6 sm:p-8 text-center backdrop-blur-md">
-        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-2xl mx-auto mb-3">
-          ⏱️
+      <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center text-xl shrink-0">
+              ⏱️
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                Platform Time Tracking Telemetry Offline
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {summaryError}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={fetchSummary}
+            className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition shadow cursor-pointer shrink-0"
+          >
+            Reconnect Telemetry
+          </button>
         </div>
-        <p className="text-slate-200 font-semibold text-base mb-1">Time Tracking Telemetry Unavailable</p>
-        <p className="text-slate-400 text-xs sm:text-sm max-w-md mx-auto mb-4">{summaryError}</p>
-        <button
-          onClick={fetchSummary}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition shadow-md cursor-pointer"
-        >
-          Retry Loading Telemetry
-        </button>
       </div>
     );
   }

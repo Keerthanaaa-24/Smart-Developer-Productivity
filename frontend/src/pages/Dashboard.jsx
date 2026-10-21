@@ -99,15 +99,18 @@ const Dashboard = () => {
   return (
     <MainLayout>
       <div className="space-y-7 pb-12">
-        {/* Error Notification */}
+        {/* Telemetry Status Notification */}
         {error && (
-          <div className="bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-300 px-5 py-4 rounded-2xl flex items-center justify-between text-sm">
-            <span>{error}</span>
+          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 px-5 py-3.5 rounded-2xl flex items-center justify-between text-sm shadow-sm backdrop-blur-sm">
+            <div className="flex items-center gap-2.5">
+              <span className="text-base">⚠️</span>
+              <span>{error}</span>
+            </div>
             <button
               onClick={() => fetchOverview(true)}
-              className="font-bold underline ml-4 cursor-pointer hover:text-rose-700 dark:hover:text-rose-200"
+              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs transition shadow cursor-pointer ml-4 whitespace-nowrap"
             >
-              Retry
+              Retry Telemetry
             </button>
           </div>
         )}
@@ -131,17 +134,6 @@ const Dashboard = () => {
               ))}
             </div>
           </div>
-        ) : !overview && error ? (
-          <div className="bg-slate-900/40 border border-rose-500/30 rounded-3xl p-8 text-center backdrop-blur-md">
-            <p className="text-slate-300 font-semibold text-base mb-2">Telemetry Data Unavailable</p>
-            <p className="text-slate-400 text-sm max-w-md mx-auto mb-5">{error}</p>
-            <button
-              onClick={() => fetchOverview(true)}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm transition shadow-lg cursor-pointer"
-            >
-              Retry Loading Telemetry
-            </button>
-          </div>
         ) : (
           <PrimaryFiveMetrics
             metrics={overview?.primary_metrics}
@@ -149,24 +141,21 @@ const Dashboard = () => {
           />
         )}
 
-        {/* STAGE 1.5: Real-Time Machine Learning Productivity Intelligence */}
-        {loading && !overview ? (
-          <SkeletonBlock className="h-64" />
-        ) : !overview && error ? null : (
-          <MLProductivityCard
-            mlData={overview?.ml_prediction}
-            onRefresh={() => fetchOverview(true)}
-          />
-        )}
-
-        {/* STAGE 1.8: Real-Time Browser Activity & Platform Time Tracking */}
-        <PlatformTimeTrackingCard />
-
-        {/* STAGE 1.9: Deduplicated Today's Activity Breakdown */}
+        {/* STAGE 1.2: Deduplicated Today's Activity Breakdown */}
         {loading && !overview ? (
           <SkeletonBlock className="h-44" />
         ) : (
           <TodayActivityCards todaySummary={overview?.today_summary} />
+        )}
+
+        {/* STAGE 1.5: Real-Time Machine Learning Productivity Intelligence */}
+        {loading && !overview ? (
+          <SkeletonBlock className="h-64" />
+        ) : (
+          <MLProductivityCard
+            mlData={overview?.ml_prediction}
+            onRefresh={() => fetchOverview(true)}
+          />
         )}
 
 
@@ -187,6 +176,9 @@ const Dashboard = () => {
             </div>
           </div>
         )}
+
+        {/* STAGE 2.5: Secondary Browser Active Time Tracking */}
+        <PlatformTimeTrackingCard />
 
         {/* STAGE 3: Career Pipeline & AI Insights */}
         {loading && !overview ? (

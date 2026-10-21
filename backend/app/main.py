@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Response, status
+from fastapi import FastAPI, Response, status, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import Base, engine, verify_database_connection
@@ -144,6 +145,35 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Catches all uncaught server errors, logs the full traceback, and returns a structured
+    JSON 500 response while guaranteeing CORS headers are preserved.
+    """
+    import logging, traceback
+    logging.getLogger("uvicorn.error").error(
+        f"[ServerError] Unhandled exception on {request.method} {request.url.path}: {exc}\n{traceback.format_exc()}"
+    )
+    origin = request.headers.get("origin")
+    headers = {}
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Access-Control-Allow-Methods"] = "*"
+        headers["Access-Control-Allow-Headers"] = "*"
+        headers["Vary"] = "Origin"
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "An internal server error occurred while processing your request. Please try again in a few moments.",
+            "error_type": exc.__class__.__name__,
+        },
+        headers=headers,
+    )
 
 
 # Database tables are created/verified inside the lifespan event handler

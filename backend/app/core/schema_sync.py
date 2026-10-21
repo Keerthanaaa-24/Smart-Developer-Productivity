@@ -20,7 +20,7 @@ import app.models  # Ensures all models are registered on Base.metadata
 
 logger = logging.getLogger("uvicorn.error")
 
-MIGRATION_VERSION = "2026_10_phase6_admin_v1"
+MIGRATION_VERSION = "2026_10_productivity_intelligence_v2"
 
 
 def _acquire_advisory_lock(conn, dialect_name: str) -> bool:
@@ -69,13 +69,11 @@ def _ensure_migration_table(conn, dialect_name: str) -> None:
 def sync_database_schema(target_engine: Engine = None, force: bool = False) -> int:
     """
     Compares all registered SQLAlchemy models with live database tables.
-    Fast-path: Checks schema_migrations table; if MIGRATION_VERSION was already verified,
-    skips expensive remote table/column inspection.
-    Otherwise:
+    Guarantees that all registered model columns exist in the database.
     1. Runs Base.metadata.create_all to create missing tables.
     2. Inspects existing tables and executes ALTER TABLE ADD COLUMN for missing columns.
-    3. Validates that all model columns exist after synchronization.
-    Raises RuntimeError if any model column is still missing after migration.
+    3. Reconciles compound indexes for query performance.
+    4. Validates that all model columns exist after synchronization.
     """
     eng = target_engine or engine
     logger.info("[SchemaSync] Beginning database schema verification...")
@@ -93,21 +91,6 @@ def sync_database_schema(target_engine: Engine = None, force: bool = False) -> i
         try:
             # 1. Ensure migration history table exists
             _ensure_migration_table(conn, dialect_name)
-
-            # Fast-path check: if this version was already applied and verified, skip expensive table inspection
-            if not force:
-                try:
-                    row = conn.execute(
-                        text("SELECT 1 FROM schema_migrations WHERE version = :ver"),
-                        {"ver": MIGRATION_VERSION},
-                    ).scalar()
-                    if row:
-                        logger.info(
-                            f"[SchemaSync] Schema version '{MIGRATION_VERSION}' is verified up-to-date. Startup sync complete."
-                        )
-                        return 0
-                except Exception as chk_err:
-                    logger.debug(f"[SchemaSync] Migration check notice: {chk_err}")
 
             # 2. Create wholly missing tables first
             try:
@@ -180,6 +163,21 @@ def sync_database_schema(target_engine: Engine = None, force: bool = False) -> i
                                 logger.error(
                                     f"[SchemaSync] Error adding column '{col.name}' to '{table_name}': {add_err}"
                                 )
+
+            # 2.5 Reconcile compound indexes for project-aware queries (MySQL / SQLite)
+            if dialect_name == "mysql":
+                for idx_name, idx_sql in [
+                    ("ix_tasks_user_project", "CREATE INDEX ix_tasks_user_project ON tasks (user_id, project_id)"),
+                    ("ix_dev_activity_user_project", "CREATE INDEX ix_dev_activity_user_project ON developer_activity (user_id, project_id)"),
+                ]:
+                    try:
+                        conn.execute(text(idx_sql))
+                        conn.commit()
+                        logger.info(f"[SchemaSync] Created index '{idx_name}'")
+                    except Exception as idx_err:
+                        # Error 1061 is MySQL duplicate key/index name
+                        if "1061" not in str(idx_err) and "duplicate" not in str(idx_err).lower():
+                            logger.warning(f"[SchemaSync] Index notice for '{idx_name}': {idx_err}")
 
             # 3. Post-sync verification: ensure no required model column is missing
             fresh_inspector = inspect(eng)

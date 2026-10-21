@@ -1434,3 +1434,21 @@ def list_audit_logs(
         "limit": limit,
         "pages": (total_count + limit - 1) // limit if limit else 1,
     }
+
+
+@router.post("/system/sync-schema", summary="Synchronize database schema and missing columns")
+def admin_sync_database_schema(
+    current_admin: User = Depends(get_current_admin_user),
+):
+    """
+    Triggers an immediate database schema reconciliation to ensure all
+    model columns, indexes, and tables exist without requiring a server reboot.
+    """
+    from app.core.schema_sync import sync_database_schema
+    added = sync_database_schema(force=True)
+    return {
+        "success": True,
+        "message": f"Database schema synchronized successfully. Reconciled {added} column(s).",
+        "added_columns": added,
+    }
+

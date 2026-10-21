@@ -173,7 +173,7 @@ API.interceptors.response.use(
     const isColdStartStatus = status === 502 || status === 504 || (status === 503 && !isDbUnavailable);
     const isGenuineColdStart = isTimeout || isColdStartStatus || isNetworkError;
 
-    // Determine if safe for single cold-start retry
+    // Determine if safe for bounded cold-start retry
     // ONLY safe idempotent GET requests are retried automatically.
     // POST, PUT, DELETE, and auth/oauth mutations are NEVER blindly retried.
     const isSafeGet = method === "get";
@@ -182,11 +182,14 @@ API.interceptors.response.use(
       url.includes("/github/login") ||
       url.includes("/github/callback");
 
-    if (isSafeGet && !isOAuthFlow && isGenuineColdStart && !config._retry) {
-      config._retry = true;
-      console.info(`[Render Cold-Start] Retrying safe GET request once: ${url}`);
-      // Wait 1.5s before single retry
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+    const retryCount = config._retryCount || 0;
+    const maxRetries = 2;
+
+    if (isSafeGet && !isOAuthFlow && isGenuineColdStart && retryCount < maxRetries) {
+      config._retryCount = retryCount + 1;
+      const backoffDelay = (retryCount + 1) * 1200; // 1.2s, 2.4s
+      console.info(`[Backend Connection] Retrying safe GET (${config._retryCount}/${maxRetries}) in ${backoffDelay}ms: ${url}`);
+      await new Promise((resolve) => setTimeout(resolve, backoffDelay));
       return API(config);
     }
 
@@ -219,9 +222,12 @@ API.interceptors.response.use(
     } else if (isTimeout) {
       error.friendlyMessage =
         "The server is taking longer than expected to respond (backend may be waking up from an idle state). Please try again in a moment.";
+    } else if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      error.friendlyMessage =
+        "You appear to be offline. Please check your internet connection.";
     } else if (isNetworkError) {
       error.friendlyMessage =
-        "Unable to reach the backend service. It may be waking up or your network connection is offline.";
+        "Unable to reach the backend service. It may be waking up from cold-start or your network connection is offline.";
     } else if (isColdStartStatus) {
       error.friendlyMessage =
         "Backend service is waking up from idle state. Please wait a moment and try again.";
@@ -234,7 +240,10 @@ API.interceptors.response.use(
     } else if (error.response?.status === 429) {
       error.friendlyMessage = "Rate limit reached. Please slow down and try again shortly.";
     } else if (error.response?.status === 500) {
-      error.friendlyMessage = "An internal server error occurred. Please try again in a few moments.";
+      error.friendlyMessage =
+        typeof error.response?.data?.detail === "string"
+          ? error.response.data.detail
+          : "An internal server error occurred while processing metrics. Please try again in a few moments.";
     } else if (error.response?.data?.detail) {
       const detail = error.response.data.detail;
       if (typeof detail === "string") {
