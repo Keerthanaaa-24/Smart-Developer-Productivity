@@ -25,7 +25,12 @@ def _get_user_today(db: Session, user_id: int, client_date: date | None = None) 
     """
     if client_date:
         return client_date
-    return date.today()
+    try:
+        from app.services.unified_activity_service import get_user_local_today
+        return get_user_local_today(db, user_id)
+    except Exception:
+        return date.today()
+
 
 
 def record_activity(

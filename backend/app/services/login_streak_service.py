@@ -5,6 +5,16 @@ from sqlalchemy import desc
 from app.models.login_history import LoginHistory
 
 
+def _get_local_today(db: Session, user_id: int, client_date: date | None = None) -> date:
+    if client_date:
+        return client_date
+    try:
+        from app.services.unified_activity_service import get_user_local_today
+        return get_user_local_today(db, user_id)
+    except Exception:
+        return date.today()
+
+
 def record_user_login(
     db: Session,
     user_id: int,
@@ -15,7 +25,7 @@ def record_user_login(
     """
     Idempotently records login history event for the specified date.
     """
-    act_date = login_date or date.today()
+    act_date = _get_local_today(db, user_id, login_date)
     login_entry = LoginHistory(
         user_id=user_id,
         login_date=act_date,
@@ -36,7 +46,8 @@ def get_login_streak(db: Session, user_id: int, target_date: date | None = None)
     - Missing day = reset streak.
     - Longest streak = max consecutive streak in history.
     """
-    today = target_date or date.today()
+    today = _get_local_today(db, user_id, target_date)
+
 
     # Query distinct login dates sorted descending
     records = (

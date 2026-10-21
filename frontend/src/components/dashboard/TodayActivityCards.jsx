@@ -80,11 +80,11 @@ const TodayActivityCards = ({ todaySummary = {} }) => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
             Today's Activity Breakdown
           </h2>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Real time spent across developer domains today.
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+            Deduplicated real time spent across developer domains today.
           </p>
         </div>
       </div>
@@ -100,47 +100,47 @@ const TodayActivityCards = ({ todaySummary = {} }) => {
           return (
             <div
               key={act.title}
-              className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between"
+              className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-5 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between group"
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div
-                    className={`w-10 h-10 rounded-xl bg-gradient-to-br ${act.color} text-white flex items-center justify-center text-base shadow-sm`}
+                    className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${act.color} text-white flex items-center justify-center text-base shadow-sm group-hover:scale-105 transition-transform`}
                   >
                     {act.icon}
                   </div>
                   {hasTime ? (
-                    <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60">
                       <FaCheckCircle className="text-[10px]" />
                       Active
                     </span>
                   ) : (
-                    <span className="text-xs text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">
+                    <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
                       0%
                     </span>
                   )}
                 </div>
 
-                <p className="text-sm font-medium text-slate-600">{act.title}</p>
-                <p className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{act.title}</p>
+                <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mt-1 tracking-tight">
                   {formatDuration(act.seconds)}
                 </p>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-100">
-                <div className="flex justify-between text-xs text-slate-400 mb-1.5">
-                  <span>Daily Progress</span>
-                  <span className="font-semibold text-slate-700">
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex justify-between text-xs text-slate-400 dark:text-slate-500 mb-1.5 font-medium">
+                  <span>Daily Goal</span>
+                  <span className="font-bold text-slate-700 dark:text-slate-300">
                     {progressPercent}%
                   </span>
                 </div>
-                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                   <div
                     className={`h-full ${act.barColor} rounded-full transition-all duration-700`}
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-[11px] text-slate-500 mt-2 truncate">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 truncate">
                   {act.detail}
                 </p>
               </div>
@@ -153,3 +153,4 @@ const TodayActivityCards = ({ todaySummary = {} }) => {
 };
 
 export default TodayActivityCards;
+

@@ -69,29 +69,56 @@ def get_user_projects(
         return []
     
     # 1. Batch load user tasks and activities in single indexed queries to eliminate N+1 roundtrips
-    user_tasks = db.query(Task.description, Task.status).filter(Task.user_id == user_id).all()
+    user_tasks = db.query(
+        Task.id,
+        Task.title,
+        Task.description,
+        Task.status,
+        Task.priority,
+        Task.project_id,
+    ).filter(Task.user_id == user_id).all()
+
     user_activities = db.query(
+        DeveloperActivity.id,
         DeveloperActivity.title,
         DeveloperActivity.details,
-        DeveloperActivity.duration_seconds
+        DeveloperActivity.duration_seconds,
+        DeveloperActivity.project_id,
+        DeveloperActivity.source,
+        DeveloperActivity.platform,
+        DeveloperActivity.activity_type,
+        DeveloperActivity.activity_date,
+        DeveloperActivity.created_at,
     ).filter(DeveloperActivity.user_id == user_id).all()
     
     results = []
     for p in projects:
         p_name_lower = p.name.lower().strip()
         
-        # In-memory task matching
-        matching_tasks = [t for t in user_tasks if t.description and p_name_lower in t.description.lower()]
+        # Dual relational + name fallback task matching
+        matching_tasks = [
+            t for t in user_tasks
+            if (t.project_id == p.id)
+            or (t.project_id is None and (
+                (t.description and p_name_lower in t.description.lower())
+                or (t.title and p_name_lower in t.title.lower())
+            ))
+        ]
         total_tasks = len(matching_tasks)
         completed_tasks = len([t for t in matching_tasks if t.status == "Completed"])
         progress = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
         
-        # In-memory activity coding duration matching
+        # Dual relational + name fallback activity coding duration matching
         matching_acts = [
             a for a in user_activities
-            if (a.title and p_name_lower in a.title.lower()) or (a.details and p_name_lower in a.details.lower())
+            if (a.project_id == p.id)
+            or (a.project_id is None and (
+                (a.title and p_name_lower in a.title.lower())
+                or (a.details and p_name_lower in a.details.lower())
+            ))
         ]
         total_coding_seconds = sum(a.duration_seconds or 0 for a in matching_acts)
+        verified_events_count = len([a for a in matching_acts if a.source in ("vscode_extension", "browser_extension", "github_api")])
         
         results.append({
             "id": p.id,
@@ -104,10 +131,92 @@ def get_user_projects(
             "completed_tasks": completed_tasks,
             "progress": progress,
             "coding_seconds": total_coding_seconds,
+            "verified_events_count": verified_events_count,
+            "evidence_backed": (completed_tasks > 0 or total_coding_seconds > 0 or verified_events_count > 0),
             "created_at": p.created_at.isoformat() if p.created_at else None,
             "updated_at": p.updated_at.isoformat() if p.updated_at else None,
         })
     return results
+
+
+def get_project_timeline(db: Session, project_id: int, user_id: int) -> list[dict]:
+    """
+    Returns a unified, transparent chronological timeline of activities,
+    commits, IDE coding sessions, and completed tasks attributed to this project.
+    Distinguishes verified telemetry from self-reported manual milestones.
+    """
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user_id).first()
+    if not project:
+        return []
+
+    p_name_lower = project.name.lower().strip()
+    timeline_events = []
+
+    # 1. Associated Tasks
+    tasks = db.query(Task).filter(
+        Task.user_id == user_id,
+        (Task.project_id == project_id) | (Task.description.ilike(f"%{p_name_lower}%")),
+    ).all()
+
+    for t in tasks:
+        timeline_events.append({
+            "id": f"task_{t.id}",
+            "type": "task",
+            "title": f"Task: {t.title}",
+            "status": t.status,
+            "priority": t.priority,
+            "provenance": "verified_task" if t.status == "Completed" else "planned_task",
+            "is_verified": t.status == "Completed",
+            "date": str(t.due_date) if t.due_date else None,
+            "created_at": None,
+        })
+
+    # 2. Associated Activities (VS Code sessions, GitHub events, manual logs)
+    activities = db.query(DeveloperActivity).filter(
+        DeveloperActivity.user_id == user_id,
+        (DeveloperActivity.project_id == project_id)
+        | (DeveloperActivity.title.ilike(f"%{p_name_lower}%"))
+        | (DeveloperActivity.details.ilike(f"%{p_name_lower}%")),
+    ).order_by(desc(DeveloperActivity.created_at)).limit(50).all()
+
+    for a in activities:
+        prov = "self_reported"
+        is_verified = False
+        if a.source == "vscode_extension":
+            prov = "verified_ide_telemetry"
+            is_verified = True
+        elif a.source in ("browser_extension", "github_api"):
+            prov = "verified_platform_telemetry"
+            is_verified = True
+        elif a.source == "task_system":
+            prov = "verified_task_completion"
+            is_verified = True
+
+        dur_mins = round((a.duration_seconds or 0) / 60)
+        dur_label = f"{dur_mins}m" if dur_mins > 0 else "Milestone"
+
+        timeline_events.append({
+            "id": f"act_{a.id}",
+            "type": a.activity_type or "activity",
+            "title": a.title or f"Activity on {a.platform}",
+            "details": a.details,
+            "duration_seconds": a.duration_seconds or 0,
+            "duration_label": dur_label,
+            "platform": a.platform,
+            "source": a.source,
+            "provenance": prov,
+            "is_verified": is_verified,
+            "date": str(a.activity_date) if a.activity_date else None,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        })
+
+    # Sort descending by date/created_at
+    timeline_events.sort(
+        key=lambda x: (x.get("created_at") or x.get("date") or "1970-01-01"),
+        reverse=True,
+    )
+    return timeline_events
+
 
 
 def get_project_by_id(db: Session, project_id: int, user_id: int) -> dict | None:

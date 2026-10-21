@@ -9,6 +9,7 @@ class TaskCreate(BaseModel):
     status: Optional[str] = "Pending"
     priority: Optional[str] = "Medium"
     due_date: Optional[date] = None
+    project_id: Optional[int] = None
 
 
 class TaskResponse(BaseModel):
@@ -19,5 +20,6 @@ class TaskResponse(BaseModel):
     priority: str
     due_date: Optional[date] = None
     user_id: int
+    project_id: Optional[int] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)

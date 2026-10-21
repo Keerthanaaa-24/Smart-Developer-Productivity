@@ -670,6 +670,7 @@ def get_dashboard_overview(db: Session, user_id: int, force_refresh: bool = Fals
     from app.models.pomodoro_session import PomodoroSession
     from app.services.login_streak_service import get_login_streak
     from app.services.project_service import get_user_projects
+    from app.services.unified_activity_service import get_user_local_today, merge_time_intervals
 
     user = db.query(User).filter(User.id == user_id).first()
     settings = None
@@ -686,7 +687,7 @@ def get_dashboard_overview(db: Session, user_id: int, force_refresh: bool = Fals
         else (user.username if user and user.username else "Developer")
     )
     user_email = user.email if user and user.email else ""
-    today = date.today()
+    today = get_user_local_today(db, user_id)
 
     target_coding_hours = float(settings.daily_coding_target_hours or 2.0) if settings else 2.0
     target_focus_minutes = int(settings.daily_focus_target_minutes or 120) if settings else 120
@@ -729,17 +730,21 @@ def get_dashboard_overview(db: Session, user_id: int, force_refresh: bool = Fals
         "recent_tasks": recent_tasks,
     }
 
-    # 2. Today's Activity Breakdown
+    # 2. Today's Activity Breakdown with Interval Overlap Deduplication
     today_acts = db.query(DeveloperActivity).filter(
         DeveloperActivity.user_id == user_id,
         DeveloperActivity.activity_date == today,
     ).all()
 
-    coding_seconds = 0
-    learning_seconds = 0
-    problem_solving_seconds = 0
     github_activities_today = 0
     today_platforms_set = set()
+
+    coding_intervals = []
+    coding_fallback = 0
+    learning_intervals = []
+    learning_fallback = 0
+    problem_intervals = []
+    problem_fallback = 0
 
     for act in today_acts:
         plat = (act.platform or "").lower()
@@ -748,23 +753,47 @@ def get_dashboard_overview(db: Session, user_id: int, force_refresh: bool = Fals
         cnt = act.activity_count or 1
         today_platforms_set.add(plat)
 
+        has_interval = act.started_at and act.ended_at and act.ended_at > act.started_at
+
         if cat == "coding" or plat in ("github", "vscode", "coding", "git"):
             if plat == "github":
                 github_activities_today += cnt
-            coding_seconds += dur
+            if has_interval:
+                coding_intervals.append((act.started_at, act.ended_at))
+            else:
+                coding_fallback += dur
         elif cat == "problem_solving" or plat in ("leetcode", "geeksforgeeks", "hackerrank"):
-            problem_solving_seconds += dur
+            if has_interval:
+                problem_intervals.append((act.started_at, act.ended_at))
+            else:
+                problem_fallback += dur
         elif cat == "learning" or plat in ("freecodecamp", "coursera", "nptel"):
-            learning_seconds += dur
+            if has_interval:
+                learning_intervals.append((act.started_at, act.ended_at))
+            else:
+                learning_fallback += dur
 
-    # 3. Focus / Pomodoro Time from verified completed sessions
+    coding_seconds = min(86400, merge_time_intervals(coding_intervals) + coding_fallback)
+    learning_seconds = min(86400, merge_time_intervals(learning_intervals) + learning_fallback)
+    problem_solving_seconds = min(86400, merge_time_intervals(problem_intervals) + problem_fallback)
+
+    # 3. Focus / Pomodoro Time from verified completed sessions (with interval merge)
     today_pomodoros = db.query(PomodoroSession).filter(
         PomodoroSession.user_id == user_id,
         PomodoroSession.status == "completed",
         func.date(PomodoroSession.started_at) == today,
     ).all()
 
-    focus_seconds = sum(p.actual_duration_seconds or p.planned_duration_seconds or 0 for p in today_pomodoros)
+    pomo_intervals = []
+    pomo_fallback = 0
+    for p in today_pomodoros:
+        dur = p.actual_duration_seconds or p.planned_duration_seconds or 0
+        if p.started_at and p.ended_at and p.ended_at > p.started_at:
+            pomo_intervals.append((p.started_at, p.ended_at))
+        else:
+            pomo_fallback += dur
+
+    focus_seconds = min(86400, merge_time_intervals(pomo_intervals) + pomo_fallback)
     if focus_seconds == 0:
         # Check developer_activity for pomodoro events
         pom_acts = [a for a in today_acts if (a.platform == "pomodoro" or "focus" in (a.activity_type or "").lower())]
@@ -781,6 +810,7 @@ def get_dashboard_overview(db: Session, user_id: int, force_refresh: bool = Fals
         if h > 0:
             return f"{h}h"
         return f"{m}m"
+
 
     # 4. Login Streak
     login_streak_data = get_login_streak(db, user_id)

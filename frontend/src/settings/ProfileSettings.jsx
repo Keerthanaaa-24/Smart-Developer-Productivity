@@ -1,6 +1,20 @@
 import { useState, useEffect } from "react";
-import { FaUser, FaEnvelope, FaPen, FaCheckCircle, FaExclamationCircle } from "react-icons/fa";
+import { FaUser, FaEnvelope, FaPen, FaCheckCircle, FaExclamationCircle, FaUniversity, FaClock, FaIdCard, FaGraduationCap } from "react-icons/fa";
 import { getProfileSettings, updateProfileSettings } from "../api/settingsApi";
+
+const TIMEZONE_OPTIONS = [
+  { value: "UTC", label: "UTC (Coordinated Universal Time)" },
+  { value: "Asia/Kolkata", label: "Asia/Kolkata (IST - UTC+05:30)" },
+  { value: "America/New_York", label: "America/New_York (EST/EDT - UTC-05:00)" },
+  { value: "America/Los_Angeles", label: "America/Los_Angeles (PST/PDT - UTC-08:00)" },
+  { value: "America/Chicago", label: "America/Chicago (CST/CDT - UTC-06:00)" },
+  { value: "Europe/London", label: "Europe/London (GMT/BST - UTC+00:00)" },
+  { value: "Europe/Berlin", label: "Europe/Berlin (CET/CEST - UTC+01:00)" },
+  { value: "Asia/Tokyo", label: "Asia/Tokyo (JST - UTC+09:00)" },
+  { value: "Asia/Singapore", label: "Asia/Singapore (SGT - UTC+08:00)" },
+  { value: "Asia/Dubai", label: "Asia/Dubai (GST - UTC+04:00)" },
+  { value: "Australia/Sydney", label: "Australia/Sydney (AEST - UTC+10:00)" },
+];
 
 const ProfileSettings = ({ onProfileUpdated }) => {
   const [formData, setFormData] = useState({
@@ -8,6 +22,11 @@ const ProfileSettings = ({ onProfileUpdated }) => {
     email: "",
     full_name: "",
     bio: "",
+    timezone: "UTC",
+    institution: "",
+    department: "",
+    batch_year: "",
+    student_id_number: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -23,6 +42,11 @@ const ProfileSettings = ({ onProfileUpdated }) => {
             email: data.email || "",
             full_name: data.full_name || "",
             bio: data.bio || "",
+            timezone: data.timezone || "UTC",
+            institution: data.institution || "",
+            department: data.department || "",
+            batch_year: data.batch_year || "",
+            student_id_number: data.student_id_number || "",
           });
         }
       } catch (err) {
@@ -49,9 +73,14 @@ const ProfileSettings = ({ onProfileUpdated }) => {
         username: formData.username,
         full_name: formData.full_name,
         bio: formData.bio,
+        timezone: formData.timezone,
+        institution: formData.institution,
+        department: formData.department,
+        batch_year: formData.batch_year,
+        student_id_number: formData.student_id_number,
       });
 
-      setFeedback({ type: "success", message: "Profile updated successfully!" });
+      setFeedback({ type: "success", message: "Profile & academic settings updated successfully!" });
       
       // Sync local storage & navbar
       const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -61,6 +90,8 @@ const ProfileSettings = ({ onProfileUpdated }) => {
         name: res.profile.full_name || res.profile.username,
         full_name: res.profile.full_name,
         bio: res.profile.bio,
+        institution: res.profile.institution,
+        department: res.profile.department,
       };
       localStorage.setItem("user", JSON.stringify(updatedUser));
       window.dispatchEvent(new Event("userProfileUpdated"));
@@ -92,9 +123,9 @@ const ProfileSettings = ({ onProfileUpdated }) => {
   return (
     <div className="p-6 sm:p-8 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-3xl transition-colors duration-200">
       <div className="border-b border-slate-100 dark:border-slate-800 pb-5 mb-6">
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Developer Profile</h2>
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Developer & Academic Profile</h2>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-          Manage your public identity, display name, and developer biography.
+          Manage your public identity, college metadata, graduation cohort, and timezone calibration.
         </p>
       </div>
 
@@ -115,7 +146,8 @@ const ProfileSettings = ({ onProfileUpdated }) => {
         </div>
       )}
 
-      <form onSubmit={handleSave} className="space-y-5 max-w-2xl">
+      <form onSubmit={handleSave} className="space-y-6 max-w-2xl">
+        {/* Core Identity */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
@@ -151,24 +183,112 @@ const ProfileSettings = ({ onProfileUpdated }) => {
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
-            Email Address (Verified)
-          </label>
-          <div className="relative">
-            <input
-              type="email"
-              value={formData.email}
-              disabled
-              className="w-full bg-slate-100/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed"
-            />
-            <span className="absolute right-3.5 top-3.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 bg-slate-200/70 dark:bg-slate-700 px-2 py-0.5 rounded">
-              Read-only
-            </span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+              Email Address (Verified)
+            </label>
+            <div className="relative">
+              <input
+                type="email"
+                value={formData.email}
+                disabled
+                className="w-full bg-slate-100/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed"
+              />
+              <span className="absolute right-3.5 top-3.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 bg-slate-200/70 dark:bg-slate-700 px-2 py-0.5 rounded">
+                Read-only
+              </span>
+            </div>
           </div>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-            Account email is secured and cannot be changed directly for security reasons.
-          </p>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <FaClock className="text-blue-500" />
+              <span>Timezone (Calibration)</span>
+            </label>
+            <select
+              name="timezone"
+              value={formData.timezone}
+              onChange={handleChange}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800/90 focus:outline-none focus:ring-2 focus:ring-blue-500 transition cursor-pointer"
+            >
+              {TIMEZONE_OPTIONS.map((tz) => (
+                <option key={tz.value} value={tz.value}>
+                  {tz.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+              Determines daily streak boundaries and today's activity cutoffs.
+            </p>
+          </div>
+        </div>
+
+        {/* Section: College & Academic Scale */}
+        <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-3">
+            <FaUniversity className="text-indigo-500" />
+            <span>Institutional & College Scale Metadata</span>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
+                Institution / College Name
+              </label>
+              <input
+                type="text"
+                name="institution"
+                value={formData.institution}
+                onChange={handleChange}
+                placeholder="e.g. Stanford University / IIT"
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800/90 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
+                Department / Major
+              </label>
+              <input
+                type="text"
+                name="department"
+                value={formData.department}
+                onChange={handleChange}
+                placeholder="e.g. Computer Science & Eng."
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800/90 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5 flex items-center gap-1.5">
+                <FaGraduationCap className="text-emerald-500 text-xs" />
+                <span>Graduation Batch / Year</span>
+              </label>
+              <input
+                type="text"
+                name="batch_year"
+                value={formData.batch_year}
+                onChange={handleChange}
+                placeholder="e.g. 2026"
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800/90 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5 flex items-center gap-1.5">
+                <FaIdCard className="text-amber-500 text-xs" />
+                <span>Student ID / Roll Number</span>
+              </label>
+              <input
+                type="text"
+                name="student_id_number"
+                value={formData.student_id_number}
+                onChange={handleChange}
+                placeholder="e.g. CS2026-042"
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800/90 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+              />
+            </div>
+          </div>
         </div>
 
         <div>
@@ -179,8 +299,8 @@ const ProfileSettings = ({ onProfileUpdated }) => {
             name="bio"
             value={formData.bio}
             onChange={handleChange}
-            rows="4"
-            placeholder="Tell fellow developers about your primary stack, interests, and engineering goals..."
+            rows="3"
+            placeholder="Tell fellow developers and mentors about your primary tech stack, goals, and projects..."
             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800/90 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
           />
         </div>
@@ -194,7 +314,7 @@ const ProfileSettings = ({ onProfileUpdated }) => {
             {saving ? (
               <>
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                <span>Saving Changes...</span>
+                <span>Saving Profile...</span>
               </>
             ) : (
               <>

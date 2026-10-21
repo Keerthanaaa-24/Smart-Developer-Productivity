@@ -290,13 +290,25 @@ const Projects = () => {
               >
                 <div>
                   <div className="flex items-start justify-between gap-3 mb-3">
-                    <span
-                      className={`text-[11px] font-bold px-3 py-1 rounded-full border ${getStatusBadge(
-                        p.status
-                      )}`}
-                    >
-                      {p.status}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span
+                        className={`text-[11px] font-bold px-3 py-1 rounded-full border ${getStatusBadge(
+                          p.status
+                        )}`}
+                      >
+                        {p.status}
+                      </span>
+                      {p.evidence_backed ? (
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1">
+                          <FaCheckCircle className="text-[9px]" />
+                          Verified
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                          Self-Reported
+                        </span>
+                      )}
+                    </div>
 
                     <div className="flex items-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
                       <button
@@ -377,9 +389,13 @@ const Projects = () => {
                         <FaExternalLinkAlt className="text-[10px]" />
                       </a>
                     ) : (
-                      <span className="text-[11px] text-slate-400 dark:text-slate-500 italic">No repo linked</span>
+                      <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                        <FaFolder className="text-[10px] text-indigo-500" />
+                        <span>Local Workspace</span>
+                      </span>
                     )}
                   </div>
+
                 </div>
               </div>
             ))}

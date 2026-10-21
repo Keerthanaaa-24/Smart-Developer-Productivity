@@ -1,4 +1,5 @@
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+import zoneinfo
 from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
@@ -7,6 +8,7 @@ from app.core.cache import user_cache
 from app.models.user import User
 from app.models.developer_activity import DeveloperActivity
 from app.models.user_settings import UserSettings
+from app.models.project import Project
 from app.models.github_connection import GitHubConnection
 from app.models.leetcode_connection import LeetCodeConnection
 from app.models.freecodecamp_connection import FreeCodeCampConnection
@@ -14,6 +16,82 @@ from app.models.geeksforgeeks_connection import GeeksForGeeksConnection
 from app.models.nptel_connection import NPTELConnection
 from app.models.coursera_connection import CourseraConnection
 from app.models.linkedin_connection import LinkedInConnection
+
+
+# =========================================================
+# TIMEZONE & LOCALIZATION UTILITIES
+# =========================================================
+
+def get_user_timezone(db: Session, user_id: int) -> str:
+    try:
+        settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+        if settings and getattr(settings, "timezone", None):
+            return settings.timezone
+    except Exception:
+        db.rollback()
+    return "UTC"
+
+
+def get_user_local_now(db: Session, user_id: int) -> datetime:
+    tz_str = get_user_timezone(db, user_id)
+    try:
+        tz = zoneinfo.ZoneInfo(tz_str)
+    except Exception:
+        tz = timezone.utc
+    return datetime.now(timezone.utc).astimezone(tz)
+
+
+def get_user_local_today(db: Session, user_id: int, client_date: date | None = None) -> date:
+    if client_date:
+        return client_date
+    return get_user_local_now(db, user_id).date()
+
+
+# =========================================================
+# INTERVAL OVERLAP MERGING & SESSION DEDUPLICATION
+# =========================================================
+
+def merge_time_intervals(intervals: list[tuple[datetime, datetime]]) -> int:
+    """
+    Given a list of (start_dt, end_dt), merges overlapping and contiguous intervals
+    and returns the total non-overlapping duration in seconds.
+    """
+    if not intervals:
+        return 0
+    valid = []
+    for s, e in intervals:
+        if s and e and e > s:
+            valid.append((s, e))
+    if not valid:
+        return 0
+    valid.sort(key=lambda x: x[0])
+    merged = []
+    curr_start, curr_end = valid[0]
+    for s, e in valid[1:]:
+        if s <= curr_end:
+            curr_end = max(curr_end, e)
+        else:
+            merged.append((curr_start, curr_end))
+            curr_start, curr_end = s, e
+    merged.append((curr_start, curr_end))
+    return int(sum((e - s).total_seconds() for s, e in merged))
+
+
+def compute_deduplicated_category_seconds(records: list[DeveloperActivity], category: str) -> int:
+    """
+    Calculates total active duration for a category, resolving multi-source
+    and multi-window overlapping sessions to eliminate double-counting.
+    """
+    cat_records = [r for r in records if (r.category if r.category in VALID_CATEGORIES else "other") == category]
+    intervals = []
+    fallback_sum = 0
+    for r in cat_records:
+        if r.started_at and r.ended_at and r.ended_at > r.started_at:
+            intervals.append((r.started_at, r.ended_at))
+        else:
+            fallback_sum += (r.duration_seconds or 0)
+    merged_secs = merge_time_intervals(intervals)
+    return min(86400, merged_secs + fallback_sum)
 
 
 # =========================================================
@@ -93,16 +171,18 @@ def record_unified_activity(
     source: str = "automatic",
     external_id: str | None = None,
     activity_count: int = 1,
+    project_id: int | None = None,
 ) -> DeveloperActivity | None:
     # 1. Respect privacy / activity tracking setting
     if source != "manual" and not is_activity_tracking_enabled(db, user_id):
         return None
 
     now = datetime.utcnow()
-    act_date = activity_date or (started_at.date() if started_at else now.date())
+    act_date = activity_date or (started_at.date() if started_at else get_user_local_today(db, user_id))
     normalized_cat = normalize_category(platform, category)
     plat_clean = platform.lower().strip()
     type_clean = activity_type.lower().strip()
+    safe_duration = max(0, min(86400, duration_seconds))
 
     # 2. Strict Deduplication by external_id if provided
     if external_id:
@@ -119,7 +199,9 @@ def record_unified_activity(
             # Update existing record if needed without creating duplicate
             existing.message = message or existing.message
             existing.details = details or existing.details
-            existing.duration_seconds = max(existing.duration_seconds, duration_seconds)
+            existing.duration_seconds = max(existing.duration_seconds, safe_duration)
+            if project_id and not existing.project_id:
+                existing.project_id = project_id
             if ended_at:
                 existing.ended_at = ended_at
             db.commit()
@@ -130,6 +212,7 @@ def record_unified_activity(
     # 3. Create new discrete activity record
     activity = DeveloperActivity(
         user_id=user_id,
+        project_id=project_id,
         platform=plat_clean,
         category=normalized_cat,
         activity_type=type_clean,
@@ -138,8 +221,8 @@ def record_unified_activity(
         details=details,
         activity_date=act_date,
         started_at=started_at or now,
-        ended_at=ended_at or (now if duration_seconds > 0 else None),
-        duration_seconds=max(0, duration_seconds),
+        ended_at=ended_at or (now if safe_duration > 0 else None),
+        duration_seconds=safe_duration,
         source=source,
         external_id=external_id,
         activity_count=max(1, activity_count),
@@ -149,25 +232,27 @@ def record_unified_activity(
     db.commit()
     db.refresh(activity)
 
-    # Award points for genuine coding, problem solving, or learning activities
-    # Exclude tasks and pomodoro to prevent double-counting (handled at their respective source)
-    if activity.platform not in ("tasks", "pomodoro") and activity.category in ("coding", "problem_solving", "learning"):
-        from app.services.points_service import award_points
-        try:
-            award_points(
-                db=db,
-                user_id=user_id,
-                source_type="activity",
-                source_id=f"act_{activity.id}",
-                points=5,
-                category=activity.category or "coding",
-                description=f"{activity.title or 'Activity on ' + str(activity.platform)}",
-            )
-        except Exception as pe:
-            print("Activity points award error:", pe)
+    # Award points for genuine milestones or qualifying coding sessions (>= 15 mins = 900s)
+    # Exclude raw github event streams (avoid commit spam) and tasks/pomodoro (handled at their respective source)
+    if activity.platform not in ("tasks", "pomodoro", "github") and activity.category in ("coding", "problem_solving", "learning"):
+        if safe_duration >= 900 or activity.source == "manual":
+            from app.services.points_service import award_points
+            try:
+                award_points(
+                    db=db,
+                    user_id=user_id,
+                    source_type="activity",
+                    source_id=f"act_{activity.id}",
+                    points=5,
+                    category=activity.category or "coding",
+                    description=f"{activity.title or 'Activity on ' + str(activity.platform)}",
+                )
+            except Exception as pe:
+                print("Activity points award error:", pe)
 
     user_cache.invalidate_user(user_id)
     return activity
+
 
 
 # =========================================================
@@ -364,7 +449,7 @@ def get_activity_summary(db: Session, user_id: int, force_refresh: bool = False)
         if cached is not None:
             return cached
 
-    today = date.today()
+    today = get_user_local_today(db, user_id)
     start_week = today - timedelta(days=6)
 
     # 1. Today's Activities
@@ -377,13 +462,14 @@ def get_activity_summary(db: Session, user_id: int, force_refresh: bool = False)
         .all()
     )
 
-    today_cat_seconds = {cat: 0 for cat in VALID_CATEGORIES}
-    today_cat_counts = {cat: 0 for cat in VALID_CATEGORIES}
-
-    for a in today_records:
-        cat = a.category if a.category in VALID_CATEGORIES else "other"
-        today_cat_seconds[cat] += a.duration_seconds or 0
-        today_cat_counts[cat] += a.activity_count or 1
+    today_cat_seconds = {
+        cat: compute_deduplicated_category_seconds(today_records, cat)
+        for cat in VALID_CATEGORIES
+    }
+    today_cat_counts = {
+        cat: sum(a.activity_count or 1 for a in today_records if (a.category if a.category in VALID_CATEGORIES else "other") == cat)
+        for cat in VALID_CATEGORIES
+    }
 
     # 2. Last 7 Days Activities
     week_records = (
@@ -396,13 +482,15 @@ def get_activity_summary(db: Session, user_id: int, force_refresh: bool = False)
         .all()
     )
 
-    week_cat_seconds = {cat: 0 for cat in VALID_CATEGORIES}
-    week_cat_counts = {cat: 0 for cat in VALID_CATEGORIES}
+    week_cat_seconds = {
+        cat: compute_deduplicated_category_seconds(week_records, cat)
+        for cat in VALID_CATEGORIES
+    }
+    week_cat_counts = {
+        cat: sum(a.activity_count or 1 for a in week_records if (a.category if a.category in VALID_CATEGORIES else "other") == cat)
+        for cat in VALID_CATEGORIES
+    }
 
-    for a in week_records:
-        cat = a.category if a.category in VALID_CATEGORIES else "other"
-        week_cat_seconds[cat] += a.duration_seconds or 0
-        week_cat_counts[cat] += a.activity_count or 1
 
     # 3. Direct Pomodoro Session Query (Source of Truth for Focus Time)
     from app.models.pomodoro_session import PomodoroSession
@@ -1063,11 +1151,29 @@ def record_extension_activities(
         else:
             ended_at = now
 
-        act_date = started_at.date() if started_at else now.date()
+        act_date = started_at.date() if started_at else get_user_local_today(db, user_id)
 
         # Deduplication via client-generated event ID
         event_id = item.get("extension_event_id") or item.get("event_id")
         external_id = f"ext_{event_id}" if event_id else None
+
+        # Resolve project association
+        matched_project_id = item.get("project_id")
+        if not matched_project_id:
+            workspace_name = item.get("workspace_name")
+            if not workspace_name and item.get("title") and "in " in str(item.get("title")):
+                workspace_name = str(item.get("title")).split("in ", 1)[1].strip()
+            if workspace_name:
+                p_match = (
+                    db.query(Project)
+                    .filter(
+                        Project.user_id == user_id,
+                        Project.name.ilike(workspace_name.strip()),
+                    )
+                    .first()
+                )
+                if p_match:
+                    matched_project_id = p_match.id
 
         if external_id:
             existing = (
@@ -1080,11 +1186,15 @@ def record_extension_activities(
                 .first()
             )
             if existing:
+                if matched_project_id and not existing.project_id:
+                    existing.project_id = matched_project_id
+                    db.commit()
                 duplicate_count += 1
                 synced_items.append({
                     "id": existing.id,
                     "platform": existing.platform,
                     "external_id": existing.external_id,
+                    "project_id": existing.project_id,
                     "status": "already_synced",
                 })
                 continue
@@ -1102,6 +1212,7 @@ def record_extension_activities(
 
         activity = DeveloperActivity(
             user_id=user_id,
+            project_id=matched_project_id,
             platform=raw_platform,
             category=category,
             activity_type=activity_type,
@@ -1119,6 +1230,7 @@ def record_extension_activities(
         db.add(activity)
         db.flush()
         db.refresh(activity)
+
 
         synced_items.append({
             "id": activity.id,

@@ -22,6 +22,13 @@ from app.models.productivity_prediction import ProductivityPrediction
 from ml.predict import get_productivity_predictor, DeveloperActivityInput
 
 
+from app.services.unified_activity_service import (
+    get_user_local_now,
+    get_user_local_today,
+    merge_time_intervals,
+)
+
+
 class MLProductivityService:
     """
     Connects MySQL Activity Telemetry -> Feature Extraction -> ML Prediction -> DB Storage.
@@ -34,18 +41,19 @@ class MLProductivityService:
         uses 7-day historical telemetry to build a representative activity vector.
         Returns: (features_dict, has_sufficient_data: bool)
         """
-        today = date.today()
-        now = datetime.now()
-        hour_of_day = now.hour
-        day_of_week = now.weekday()  # 0=Monday, 6=Sunday
+        local_now = get_user_local_now(db, user_id)
+        today = local_now.date()
+        hour_of_day = local_now.hour
+        day_of_week = local_now.weekday()  # 0=Monday, 6=Sunday
 
-        # 1. Developer Activity (Today)
+        # 1. Developer Activity (Today with interval overlap deduplication)
         today_acts = db.query(DeveloperActivity).filter(
             DeveloperActivity.user_id == user_id,
             DeveloperActivity.activity_date == today,
         ).all()
 
-        coding_seconds = 0
+        coding_intervals = []
+        coding_fallback = 0
         github_commits = 0
 
         for act in today_acts:
@@ -54,14 +62,27 @@ class MLProductivityService:
             dur = act.duration_seconds or 0
             cnt = act.activity_count or 1
 
+            has_interval = act.started_at and act.ended_at and act.ended_at > act.started_at
+
             if cat == "coding" or plat in ("github", "vscode", "coding", "git"):
-                coding_seconds += dur
+                if has_interval:
+                    coding_intervals.append((act.started_at, act.ended_at))
+                else:
+                    coding_fallback += dur
                 if plat == "github":
                     github_commits += cnt
             elif plat in ("leetcode", "geeksforgeeks"):
-                coding_seconds += int(dur * 0.75)
+                if has_interval:
+                    coding_intervals.append((act.started_at, act.ended_at))
+                else:
+                    coding_fallback += int(dur * 0.75)
 
-        # 2. Tasks Completed vs Planned (All user tasks)
+        coding_seconds = min(86400, merge_time_intervals(coding_intervals) + coding_fallback)
+
+        # 2. Tasks Completed vs Planned (Target-normalized for fair daily scoring)
+        settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+        daily_target_tasks = int(getattr(settings, "daily_task_target", 5) or 5) if settings else 5
+
         task_aggs = db.query(
             func.count(Task.id).label("total"),
             func.coalesce(func.sum(case((Task.status == "Completed", 1), else_=0)), 0).label("completed"),
@@ -69,8 +90,10 @@ class MLProductivityService:
 
         total_tasks_db = int(task_aggs.total) if task_aggs else 0
         tasks_completed_db = int(task_aggs.completed) if task_aggs else 0
-        tasks_planned = max(1, total_tasks_db)
-        tasks_completed = tasks_completed_db
+
+        tasks_planned = max(1, min(total_tasks_db, daily_target_tasks)) if total_tasks_db > 0 else daily_target_tasks
+        tasks_completed = min(tasks_planned, tasks_completed_db)
+
 
         # 3. Pomodoro Focus Sessions (Today)
         today_pomodoros = db.query(PomodoroSession).filter(

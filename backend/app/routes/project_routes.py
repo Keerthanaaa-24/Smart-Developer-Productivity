@@ -11,7 +11,9 @@ from app.services.project_service import (
     get_project_by_id,
     update_project,
     delete_project,
+    get_project_timeline,
 )
+
 
 router = APIRouter(
     prefix="/projects",
@@ -90,6 +92,17 @@ def get_single_project(
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
     return proj
+
+
+@router.get("/{project_id}/timeline")
+def get_project_evidence_timeline(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    timeline = get_project_timeline(db, project_id, current_user.id)
+    return {"project_id": project_id, "timeline": timeline}
+
 
 
 @router.put("/{project_id}")

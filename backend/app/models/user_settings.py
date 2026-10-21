@@ -60,6 +60,16 @@ class UserSettings(Base):
     idle_threshold_seconds = Column(Integer, default=60, nullable=False)
     auto_sync_interval_seconds = Column(Integer, default=60, nullable=False)
 
+    # 7. Timezone & Localization
+    timezone = Column(String(50), default="UTC", nullable=False)
+
+    # 8. College-Scale & Institutional Metadata
+    institution = Column(String(150), default="", nullable=True)
+    department = Column(String(100), default="", nullable=True)
+    batch_year = Column(String(20), default="", nullable=True)
+    student_id_number = Column(String(50), default="", nullable=True)
+
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
 

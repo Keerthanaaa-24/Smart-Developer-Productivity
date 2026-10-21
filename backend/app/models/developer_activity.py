@@ -25,6 +25,7 @@ class DeveloperActivity(Base):
         Index("ix_dev_activity_user_cat_created", "user_id", "category", "created_at"),
         Index("ix_dev_activity_user_plat_created", "user_id", "platform", "created_at"),
         Index("ix_dev_activity_user_plat_ext", "user_id", "platform", "external_id"),
+        Index("ix_dev_activity_user_project", "user_id", "project_id"),
     )
 
     id = Column(
@@ -52,6 +53,17 @@ class DeveloperActivity(Base):
         nullable=True,
         index=True,
     )
+
+    project_id = Column(
+        Integer,
+        ForeignKey(
+            "projects.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
 
     # github / leetcode / nptel / coursera / pomodoro / tasks / geeksforgeeks / freecodecamp / manual / other
     platform = Column(

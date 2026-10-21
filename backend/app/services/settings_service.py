@@ -67,6 +67,11 @@ def get_full_user_settings(db: Session, user: User) -> dict:
             "full_name": settings.full_name or "",
             "bio": settings.bio or "",
             "avatar_url": settings.avatar_url or "",
+            "timezone": getattr(settings, "timezone", "UTC") or "UTC",
+            "institution": getattr(settings, "institution", "") or "",
+            "department": getattr(settings, "department", "") or "",
+            "batch_year": getattr(settings, "batch_year", "") or "",
+            "student_id_number": getattr(settings, "student_id_number", "") or "",
         },
         "appearance": {
             "theme": settings.theme or "light",
@@ -103,6 +108,11 @@ def update_profile(
     bio: str | None = None,
     avatar_url: str | None = None,
     username: str | None = None,
+    timezone: str | None = None,
+    institution: str | None = None,
+    department: str | None = None,
+    batch_year: str | None = None,
+    student_id_number: str | None = None,
 ) -> dict:
     # 1. Update username if provided and changed
     if username and username.strip() and username.strip() != user.username:
@@ -120,6 +130,16 @@ def update_profile(
         settings.bio = bio.strip()
     if avatar_url is not None:
         settings.avatar_url = avatar_url.strip()
+    if timezone is not None and timezone.strip():
+        settings.timezone = timezone.strip()
+    if institution is not None:
+        settings.institution = institution.strip()
+    if department is not None:
+        settings.department = department.strip()
+    if batch_year is not None:
+        settings.batch_year = batch_year.strip()
+    if student_id_number is not None:
+        settings.student_id_number = student_id_number.strip()
 
     db.commit()
     db.refresh(user)
@@ -135,7 +155,13 @@ def update_profile(
         "full_name": settings.full_name,
         "bio": settings.bio,
         "avatar_url": settings.avatar_url,
+        "timezone": getattr(settings, "timezone", "UTC") or "UTC",
+        "institution": getattr(settings, "institution", "") or "",
+        "department": getattr(settings, "department", "") or "",
+        "batch_year": getattr(settings, "batch_year", "") or "",
+        "student_id_number": getattr(settings, "student_id_number", "") or "",
     }
+
 
 
 def change_password(

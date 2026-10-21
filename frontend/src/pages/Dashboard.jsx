@@ -12,8 +12,10 @@ import CareerActivityCard from "../components/dashboard/CareerActivityCard";
 import AIInsights from "../components/dashboard/AIInsights";
 import RecentActivity from "../components/dashboard/RecentActivity";
 import PlatformTimeTrackingCard from "../components/dashboard/PlatformTimeTrackingCard";
+import TodayActivityCards from "../components/dashboard/TodayActivityCards";
 
 import { getDashboardOverview } from "../api/dashboardApi";
+
 
 
 const SkeletonBlock = ({ className = "h-32" }) => (
@@ -159,6 +161,14 @@ const Dashboard = () => {
 
         {/* STAGE 1.8: Real-Time Browser Activity & Platform Time Tracking */}
         <PlatformTimeTrackingCard />
+
+        {/* STAGE 1.9: Deduplicated Today's Activity Breakdown */}
+        {loading && !overview ? (
+          <SkeletonBlock className="h-44" />
+        ) : (
+          <TodayActivityCards todaySummary={overview?.today_summary} />
+        )}
+
 
 
         {/* STAGE 2: Charts & Streak */}

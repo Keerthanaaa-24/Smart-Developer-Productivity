@@ -18,7 +18,8 @@ def create_task(
         status=task.status,
         priority=task.priority,
         due_date=task.due_date,
-        user_id=user_id
+        user_id=user_id,
+        project_id=task.project_id,
     )
 
     db.add(db_task)
@@ -29,6 +30,7 @@ def create_task(
     user_cache.invalidate_user(user_id)
 
     return db_task
+
 
 
 def get_tasks(
@@ -81,9 +83,12 @@ def update_task(
     db_task.status = task.status
     db_task.priority = task.priority
     db_task.due_date = task.due_date
+    if task.project_id is not None:
+        db_task.project_id = task.project_id
 
     db.commit()
     db.refresh(db_task)
+
 
     # Log unified activity and award productivity points if task was just marked completed
     if not was_completed and is_now_completed:

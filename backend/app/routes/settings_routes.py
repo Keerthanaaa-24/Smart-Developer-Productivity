@@ -31,6 +31,12 @@ class UpdateProfileRequest(BaseModel):
     bio: str | None = None
     avatar_url: str | None = None
     username: str | None = None
+    timezone: str | None = None
+    institution: str | None = None
+    department: str | None = None
+    batch_year: str | None = None
+    student_id_number: str | None = None
+
 
 
 class ChangePasswordRequest(BaseModel):
@@ -106,8 +112,14 @@ def edit_profile(
         bio=payload.bio,
         avatar_url=payload.avatar_url,
         username=payload.username,
+        timezone=payload.timezone,
+        institution=payload.institution,
+        department=payload.department,
+        batch_year=payload.batch_year,
+        student_id_number=payload.student_id_number,
     )
     return {"message": "Profile updated successfully", "profile": updated}
+
 
 
 @router.post("/password")
