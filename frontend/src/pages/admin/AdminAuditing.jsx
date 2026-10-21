@@ -22,6 +22,15 @@ import {
   getAdminStudents,
 } from "../../api/adminApi";
 
+// Helper for user-local ISO date (YYYY-MM-DD) avoiding UTC shifts
+const getTodayLocalDate = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const AdminAuditing = () => {
   const [activeTab, setActiveTab] = useState("points"); // "points" | "streaks"
 
@@ -31,9 +40,19 @@ const AdminAuditing = () => {
   const [transactions, setTransactions] = useState([]);
   const [totalTxs, setTotalTxs] = useState(0);
   const [txPage, setTxPage] = useState(1);
+  const [txSearchInput, setTxSearchInput] = useState("");
   const [txSearch, setTxSearch] = useState("");
   const [txSourceFilter, setTxSourceFilter] = useState("");
   const [loadingTxs, setLoadingTxs] = useState(true);
+
+  // Debounce ledger search by 300ms
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setTxSearch(txSearchInput);
+      setTxPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [txSearchInput]);
 
   // Duplicates Scanner
   const [duplicatesData, setDuplicatesData] = useState(null);
@@ -61,7 +80,7 @@ const AdminAuditing = () => {
   const [loadingStreak, setLoadingStreak] = useState(false);
   const [correctStreakModalOpen, setCorrectStreakModalOpen] = useState(false);
   const [streakCorrection, setStreakCorrection] = useState({
-    target_date: new Date().toISOString().split("T")[0],
+    target_date: getTodayLocalDate(),
     action: "add_login_date",
     reason: "",
   });
@@ -354,11 +373,8 @@ const AdminAuditing = () => {
                 <input
                   type="text"
                   placeholder="Search ledger by username, source ID, description..."
-                  value={txSearch}
-                  onChange={(e) => {
-                    setTxSearch(e.target.value);
-                    setTxPage(1);
-                  }}
+                  value={txSearchInput}
+                  onChange={(e) => setTxSearchInput(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>

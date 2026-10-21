@@ -67,6 +67,142 @@ class AchievementVerificationRequest(BaseModel):
     points_override: Optional[int] = Field(None, ge=0, le=100)
 
 
+
+# ==============================================================================
+# 0. CONSOLIDATED OVERVIEW
+# ==============================================================================
+
+@router.get("/overview", summary="Consolidated dashboard overview metrics and recent activity")
+def get_admin_overview(
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Consolidated single-query overview endpoint for the Admin Dashboard.
+    Reduces multiple parallel HTTP calls into a single lightweight response.
+    """
+    t0 = time.monotonic()
+    db_ok = verify_database_connection()
+    db_latency_ms = round((time.monotonic() - t0) * 1000, 2)
+
+    total_students = db.query(User).filter(User.role == "student").count()
+    suspended_count = db.query(User).filter(User.role == "student", User.is_active == False).count()
+
+    active_7d = (
+        db.query(LoginHistory.user_id)
+        .join(User, LoginHistory.user_id == User.id)
+        .filter(
+            User.role == "student",
+            LoginHistory.login_date >= (date.today() - timedelta(days=7)),
+        )
+        .distinct()
+        .count()
+    )
+
+    ach_pending = db.query(StudentAchievement).filter(
+        StudentAchievement.verification_status.in_(["evidence_uploaded", "link_supplied", "self_reported"])
+    ).count()
+    ach_verified = db.query(StudentAchievement).filter(StudentAchievement.verification_status == "verified").count()
+    ach_total = db.query(StudentAchievement).count()
+
+    pomo_stats = (
+        db.query(
+            func.count(PomodoroSession.id).label("session_count"),
+            func.coalesce(func.sum(PomodoroSession.actual_duration_seconds), 0).label("total_sec"),
+        )
+        .join(User, PomodoroSession.user_id == User.id)
+        .filter(User.role == "student", PomodoroSession.status == "completed")
+        .first()
+    )
+    completed_tasks = (
+        db.query(Task)
+        .join(User, Task.user_id == User.id)
+        .filter(User.role == "student", Task.status == "Completed")
+        .count()
+    )
+    total_focus_hours = round((pomo_stats.total_sec / 3600), 1) if pomo_stats else 0.0
+    pomo_count = pomo_stats.session_count if pomo_stats else 0
+
+    # Duplicates count
+    dup_sources_count = (
+        db.query(PointTransaction.user_id, PointTransaction.source_id)
+        .group_by(PointTransaction.user_id, PointTransaction.source_id, PointTransaction.source_type)
+        .having(func.count(PointTransaction.id) > 1)
+        .count()
+    )
+
+    # Top 5 pending achievements for quick review
+    pending_rows = (
+        db.query(StudentAchievement, User.username, User.email)
+        .join(User, StudentAchievement.user_id == User.id)
+        .filter(StudentAchievement.verification_status.in_(["evidence_uploaded", "link_supplied", "self_reported"]))
+        .order_by(desc(StudentAchievement.created_at))
+        .limit(5)
+        .all()
+    )
+    pending_items = [
+        {
+            "id": a.id,
+            "title": a.title,
+            "username": u_name,
+            "email": u_email,
+            "issuer": a.issuer,
+            "verification_status": a.verification_status,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        }
+        for a, u_name, u_email in pending_rows
+    ]
+
+    # Top 6 recent audit logs
+    recent_logs = (
+        db.query(AdminAuditLog)
+        .order_by(desc(AdminAuditLog.created_at))
+        .limit(6)
+        .all()
+    )
+    log_items = [
+        {
+            "id": l.id,
+            "admin_username": l.admin_username,
+            "action": l.action,
+            "target_type": l.target_type,
+            "target_id": l.target_id,
+            "created_at": l.created_at.isoformat() if l.created_at else None,
+        }
+        for l in recent_logs
+    ]
+
+    return {
+        "analytics": {
+            "students": {
+                "total_registered": total_students,
+                "active_7d": active_7d,
+                "suspended": suspended_count,
+            },
+            "achievements": {
+                "total": ach_total,
+                "verified": ach_verified,
+                "pending": ach_pending,
+            },
+            "productivity": {
+                "total_focus_hours": total_focus_hours,
+                "completed_tasks": completed_tasks,
+                "pomodoro_sessions": pomo_count,
+            },
+        },
+        "health": {
+            "database": {
+                "status": "operational" if db_ok else "disconnected",
+                "latency_ms": db_latency_ms,
+                "engine": engine.dialect.name,
+            },
+        },
+        "duplicates_count": dup_sources_count,
+        "pending_achievements": pending_items,
+        "recent_logs": log_items,
+    }
+
+
 # ==============================================================================
 # 1. STUDENT MANAGEMENT
 # ==============================================================================
@@ -1095,13 +1231,21 @@ def get_platform_analytics(
     # Active students (distinct user_id in login_history)
     active_7d = (
         db.query(LoginHistory.user_id)
-        .filter(LoginHistory.login_date >= (date.today() - timedelta(days=7)))
+        .join(User, LoginHistory.user_id == User.id)
+        .filter(
+            User.role == "student",
+            LoginHistory.login_date >= (date.today() - timedelta(days=7)),
+        )
         .distinct()
         .count()
     )
     active_30d = (
         db.query(LoginHistory.user_id)
-        .filter(LoginHistory.login_date >= (date.today() - timedelta(days=30)))
+        .join(User, LoginHistory.user_id == User.id)
+        .filter(
+            User.role == "student",
+            LoginHistory.login_date >= (date.today() - timedelta(days=30)),
+        )
         .distinct()
         .count()
     )
@@ -1124,15 +1268,26 @@ def get_platform_analytics(
     )
 
     # 3. Productivity metrics
-    completed_tasks = db.query(Task).filter(Task.status == "Completed").count()
-    total_tasks = db.query(Task).count()
+    completed_tasks = (
+        db.query(Task)
+        .join(User, Task.user_id == User.id)
+        .filter(User.role == "student", Task.status == "Completed")
+        .count()
+    )
+    total_tasks = (
+        db.query(Task)
+        .join(User, Task.user_id == User.id)
+        .filter(User.role == "student")
+        .count()
+    )
 
     pomo_stats = (
         db.query(
             func.count(PomodoroSession.id).label("session_count"),
             func.coalesce(func.sum(PomodoroSession.actual_duration_seconds), 0).label("total_sec"),
         )
-        .filter(PomodoroSession.status == "completed")
+        .join(User, PomodoroSession.user_id == User.id)
+        .filter(User.role == "student", PomodoroSession.status == "completed")
         .first()
     )
     total_pomo_sessions = pomo_stats.session_count if pomo_stats else 0
@@ -1140,9 +1295,12 @@ def get_platform_analytics(
 
     total_projects = db.query(Project).count()
 
-    # 4. Points economy
+    # 4. Points economy (student points only)
     total_points = (
-        db.query(func.coalesce(func.sum(PointTransaction.points), 0)).scalar()
+        db.query(func.coalesce(func.sum(PointTransaction.points), 0))
+        .join(User, PointTransaction.user_id == User.id)
+        .filter(User.role == "student")
+        .scalar()
     ) or 0
     avg_points = round(total_points / max(1, total_students), 1)
 
@@ -1152,7 +1310,7 @@ def get_platform_analytics(
             func.date(User.created_at).label("reg_date"),
             func.count(User.id).label("count"),
         )
-        .filter(User.created_at >= fourteen_days_ago)
+        .filter(User.role == "student", User.created_at >= fourteen_days_ago)
         .group_by(func.date(User.created_at))
         .all()
     )
@@ -1163,7 +1321,8 @@ def get_platform_analytics(
             LoginHistory.login_date,
             func.count(func.distinct(LoginHistory.user_id)).label("unique_logins"),
         )
-        .filter(LoginHistory.login_date >= fourteen_days_ago)
+        .join(User, LoginHistory.user_id == User.id)
+        .filter(User.role == "student", LoginHistory.login_date >= fourteen_days_ago)
         .group_by(LoginHistory.login_date)
         .all()
     )

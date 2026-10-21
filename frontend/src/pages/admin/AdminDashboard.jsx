@@ -15,6 +15,7 @@ import {
 } from "react-icons/fa";
 import AdminLayout from "../../layouts/AdminLayout";
 import {
+  getAdminOverview,
   getAdminAnalyticsOverview,
   getAdminHealthOverview,
   getAdminDuplicatePoints,
@@ -35,6 +36,24 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       setError(null);
+
+      // Try consolidated single-query overview first for Render free-tier efficiency
+      try {
+        const overview = await getAdminOverview();
+        if (overview && overview.analytics) {
+          setAnalytics(overview.analytics);
+          setHealth(overview.health);
+          setDuplicates(overview.duplicates_count || 0);
+          setPendingAchievements(overview.pending_achievements || []);
+          setRecentLogs(overview.recent_logs || []);
+          setLoading(false);
+          return;
+        }
+      } catch (overviewErr) {
+        console.warn("Consolidated overview fallback:", overviewErr);
+      }
+
+      // Fallback to separate endpoints if needed
       const [analyticsData, healthData, dupsData, pendingData, logsData] =
         await Promise.allSettled([
           getAdminAnalyticsOverview(),
@@ -121,7 +140,11 @@ const AdminDashboard = () => {
             </div>
             <div className="mt-4">
               <h3 className="text-3xl font-black text-slate-900 dark:text-white">
-                {analytics?.students?.total_registered ?? "—"}
+                {loading ? (
+                  <span className="inline-block w-16 h-8 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse" />
+                ) : (
+                  analytics?.students?.total_registered ?? 0
+                )}
               </h3>
               <div className="flex items-center gap-2 mt-2 text-xs">
                 <span className="text-emerald-600 dark:text-emerald-400 font-bold">
@@ -147,7 +170,11 @@ const AdminDashboard = () => {
             </div>
             <div className="mt-4">
               <h3 className="text-3xl font-black text-slate-900 dark:text-white">
-                {analytics?.achievements?.pending ?? "—"}
+                {loading ? (
+                  <span className="inline-block w-16 h-8 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse" />
+                ) : (
+                  analytics?.achievements?.pending ?? 0
+                )}
               </h3>
               <div className="flex items-center gap-2 mt-2 text-xs">
                 <span className="text-indigo-600 dark:text-indigo-400 font-bold">
@@ -173,10 +200,16 @@ const AdminDashboard = () => {
             </div>
             <div className="mt-4">
               <h3 className="text-3xl font-black text-slate-900 dark:text-white">
-                {analytics?.productivity?.total_focus_hours ?? "—"}
-                <span className="text-lg font-normal text-slate-500 dark:text-slate-400 ml-1">
-                  hrs
-                </span>
+                {loading ? (
+                  <span className="inline-block w-16 h-8 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse" />
+                ) : (
+                  <>
+                    {analytics?.productivity?.total_focus_hours ?? 0}
+                    <span className="text-lg font-normal text-slate-500 dark:text-slate-400 ml-1">
+                      hrs
+                    </span>
+                  </>
+                )}
               </h3>
               <div className="flex items-center gap-2 mt-2 text-xs text-slate-500 dark:text-slate-400">
                 <span>{analytics?.productivity?.completed_tasks ?? 0} tasks done</span>
@@ -200,7 +233,11 @@ const AdminDashboard = () => {
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
                 <h3 className="text-xl font-black text-slate-900 dark:text-white capitalize">
-                  {health?.database?.status || "Operational"}
+                  {loading ? (
+                    <span className="inline-block w-20 h-6 bg-slate-200 dark:bg-slate-800 rounded animate-pulse" />
+                  ) : (
+                    health?.database?.status || "Operational"
+                  )}
                 </h3>
               </div>
               <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">

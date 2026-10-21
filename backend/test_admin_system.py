@@ -108,6 +108,7 @@ class TestAdminGovernanceSystem(unittest.TestCase):
     def test_01_student_cannot_access_admin_endpoints(self):
         """Standard student must be strictly denied with HTTP 403 on all /admin endpoints."""
         endpoints = [
+            ("GET", "/admin/overview"),
             ("GET", "/admin/students"),
             ("GET", f"/admin/students/{self.student_1.id}"),
             ("PATCH", f"/admin/students/{self.student_1.id}/status"),
@@ -378,6 +379,19 @@ class TestAdminGovernanceSystem(unittest.TestCase):
         self.assertIn("productivity", analytics_data)
         self.assertIn("trend_14d", analytics_data)
         self.assertGreaterEqual(analytics_data["students"]["total_registered"], 1)
+
+    def test_11b_admin_overview_endpoint(self):
+        """Consolidated /admin/overview endpoint returns authentic telemetry in single fast response."""
+        resp = self.client.get("/admin/overview", headers=self.admin_headers)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("analytics", data)
+        self.assertIn("health", data)
+        self.assertIn("duplicates_count", data)
+        self.assertIn("pending_achievements", data)
+        self.assertIn("recent_logs", data)
+        self.assertEqual(data["health"]["database"]["status"], "operational")
+        self.assertGreaterEqual(data["analytics"]["students"]["total_registered"], 1)
 
     # ==========================================================================
     # 7. SECURITY & AUDIT LOGS

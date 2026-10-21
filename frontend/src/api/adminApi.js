@@ -1,5 +1,11 @@
 import API from "./axios";
 
+// 0. Consolidated Overview
+export const getAdminOverview = async () => {
+  const response = await API.get("/admin/overview");
+  return response.data;
+};
+
 // 1. Student Management
 export const getAdminStudents = async (params = {}) => {
   const {
@@ -133,6 +139,7 @@ export const getAdminAuditLogs = async (params = {}) => {
 };
 
 const adminApi = {
+  getAdminOverview,
   getAdminStudents,
   getAdminStudentDetails,
   updateStudentStatus,

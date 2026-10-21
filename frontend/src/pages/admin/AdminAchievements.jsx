@@ -12,6 +12,7 @@ import {
   FaUser,
 } from "react-icons/fa";
 import AdminLayout from "../../layouts/AdminLayout";
+import API from "../../api/axios";
 import {
   getAdminAchievements,
   getAdminAchievementDetails,
@@ -24,7 +25,17 @@ const AdminAchievements = () => {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("pending");
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+
+  // Debounce search input by 300ms
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // Review Modal State
   const [reviewItem, setReviewItem] = useState(null);
@@ -65,6 +76,16 @@ const AdminAchievements = () => {
   };
 
   const handleDecision = async (decisionStatus) => {
+    if (
+      (decisionStatus === "rejected" || decisionStatus === "correction_requested") &&
+      (!notes.trim() || notes.trim().length < 3)
+    ) {
+      setActionError(
+        "Please provide feedback in the auditor notes explaining why this credential was rejected or what correction is needed."
+      );
+      return;
+    }
+
     try {
       setSubmitting(true);
       setActionError("");
@@ -139,11 +160,8 @@ const AdminAchievements = () => {
             <input
               type="text"
               placeholder="Search by achievement title, student username, or issuer..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="w-full pl-10 pr-4 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
@@ -395,10 +413,10 @@ const AdminAchievements = () => {
                   <div className="flex flex-wrap gap-2 pt-1">
                     {reviewItem.certificate_url && (
                       <a
-                        href={`http://127.0.0.1:8001/achievements/${reviewItem.id}/certificate?token=${encodeURIComponent(authToken)}`}
+                        href={`${String(API.defaults.baseURL || "").replace(/\/+$/, "")}/achievements/${reviewItem.id}/certificate?token=${encodeURIComponent(authToken)}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1.5 shadow-sm transition"
+                        className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
                       >
                         <FaEye />
                         <span>Inspect Certificate Evidence</span>

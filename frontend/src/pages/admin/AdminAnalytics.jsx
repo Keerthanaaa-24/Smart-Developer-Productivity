@@ -241,27 +241,33 @@ const AdminAnalytics = () => {
                 </div>
 
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1.5 text-xs">
-                  {data.achievements.categories.map((c, i) => (
-                    <div
-                      key={c.category}
-                      className="flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{
-                            backgroundColor: PIE_COLORS[i % PIE_COLORS.length],
-                          }}
-                        />
-                        <span className="capitalize text-slate-700 dark:text-slate-300">
-                          {c.category}
+                  {data.achievements.categories.length === 0 ? (
+                    <p className="text-slate-400 italic text-[11px] py-2 text-center">
+                      No category records logged yet.
+                    </p>
+                  ) : (
+                    data.achievements.categories.map((c, i) => (
+                      <div
+                        key={c.category}
+                        className="flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full"
+                            style={{
+                              backgroundColor: PIE_COLORS[i % PIE_COLORS.length],
+                            }}
+                          />
+                          <span className="capitalize text-slate-700 dark:text-slate-300">
+                            {c.category}
+                          </span>
+                        </div>
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          {c.count}
                         </span>
                       </div>
-                      <span className="font-bold text-slate-900 dark:text-white">
-                        {c.count}
-                      </span>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>

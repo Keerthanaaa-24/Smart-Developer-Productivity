@@ -14,6 +14,7 @@ import {
   FaHistory,
 } from "react-icons/fa";
 import AdminLayout from "../../layouts/AdminLayout";
+import { useAuth } from "../../context/AuthContext";
 import {
   getAdminStudents,
   getAdminStudentDetails,
@@ -21,13 +22,24 @@ import {
 } from "../../api/adminApi";
 
 const AdminStudents = () => {
+  const { user: currentAdmin } = useAuth();
   const [students, setStudents] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
+
+  // Debounce search input by 300ms to eliminate redundant network requests
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // Inspection Drawer
   const [inspectingUser, setInspectingUser] = useState(null);
@@ -152,11 +164,8 @@ const AdminStudents = () => {
             <input
               type="text"
               placeholder="Search by student username or email..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="w-full pl-10 pr-4 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
@@ -231,9 +240,16 @@ const AdminStudents = () => {
                             {student.username?.charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="font-bold text-slate-900 dark:text-white truncate">
-                              {student.username}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-bold text-slate-900 dark:text-white truncate">
+                                {student.username}
+                              </p>
+                              {currentAdmin?.id === student.id && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold">
+                                  You
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11px] text-slate-400 truncate">
                               {student.email}
                             </p>
@@ -299,18 +315,29 @@ const AdminStudents = () => {
                             <FaEye />
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleOpenStatusModal(student)}
-                            title={student.is_active ? "Suspend Student" : "Reactivate Student"}
-                            className={`p-1.5 rounded-lg transition cursor-pointer ${
-                              student.is_active
-                                ? "text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                                : "text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-                            }`}
-                          >
-                            {student.is_active ? <FaUserSlash /> : <FaUserCheck />}
-                          </button>
+                          {currentAdmin?.id === student.id ? (
+                            <button
+                              type="button"
+                              disabled
+                              title="You cannot suspend or modify your own administrative account"
+                              className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-50"
+                            >
+                              <FaUserSlash />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenStatusModal(student)}
+                              title={student.is_active ? "Suspend Student" : "Reactivate Student"}
+                              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                                student.is_active
+                                  ? "text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                                  : "text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                              }`}
+                            >
+                              {student.is_active ? <FaUserSlash /> : <FaUserCheck />}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -437,15 +464,21 @@ const AdminStudents = () => {
                             Account Status: {inspectionData.student.is_active ? "Active" : "Suspended"}
                           </span>
                         </div>
-                        <button
-                          onClick={() => {
-                            setInspectingUser(null);
-                            handleOpenStatusModal(inspectionData.student);
-                          }}
-                          className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
-                        >
-                          Change Status
-                        </button>
+                        {currentAdmin?.id === inspectionData.student.id ? (
+                          <span className="text-[11px] font-semibold text-slate-400 italic">
+                            (Your Account)
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setInspectingUser(null);
+                              handleOpenStatusModal(inspectionData.student);
+                            }}
+                            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                          >
+                            Change Status
+                          </button>
+                        )}
                       </div>
                       {!inspectionData.student.is_active && (
                         <p className="text-xs text-rose-700 dark:text-rose-300 mt-2">

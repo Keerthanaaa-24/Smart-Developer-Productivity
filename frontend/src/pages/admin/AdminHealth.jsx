@@ -21,6 +21,7 @@ const AdminHealth = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastCheckTime, setLastCheckTime] = useState(null);
+  const [autoRefresh, setAutoRefresh] = useState(false); // default OFF to conserve Render free-tier resources
 
   const fetchHealth = useCallback(async () => {
     try {
@@ -38,9 +39,14 @@ const AdminHealth = () => {
 
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(fetchHealth, 30000); // 30s background check
-    return () => clearInterval(interval);
   }, [fetchHealth]);
+
+  // Opt-in background refresh (120s slow check) only when explicitly enabled
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(fetchHealth, 120000);
+    return () => clearInterval(interval);
+  }, [autoRefresh, fetchHealth]);
 
   const getIntegrationIcon = (key) => {
     switch (key) {
@@ -69,7 +75,16 @@ const AdminHealth = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="rounded text-indigo-600 focus:ring-0"
+              />
+              <span>Auto-refresh (2m)</span>
+            </label>
             <span className="text-xs text-slate-400">
               Last check: {lastCheckTime || "Just now"}
             </span>
