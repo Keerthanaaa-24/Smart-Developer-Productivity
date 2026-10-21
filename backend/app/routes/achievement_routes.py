@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.core.database import get_db
-from app.core.oauth2 import get_current_user, decode_token_user_id
+from app.core.oauth2 import get_current_user, decode_token_user_id, decode_token_user_info
 from app.models.user import User
 from app.models.student_achievement import StudentAchievement
 from app.services.points_service import award_points
@@ -350,14 +350,16 @@ def get_certificate_file(
     if not ach.certificate_url:
         raise HTTPException(status_code=404, detail="No certificate file has been uploaded for this achievement.")
 
-    # Access control: If achievement is private, strictly require owner authentication
+    # Access control: If achievement is private, strictly require owner or admin authentication
     if not ach.is_public:
         auth_token = token
         if not auth_token and authorization and authorization.lower().startswith("bearer "):
             auth_token = authorization.split(" ", 1)[1].strip()
 
-        token_user_id = decode_token_user_id(auth_token) if auth_token else None
-        if not token_user_id or token_user_id != ach.user_id:
+        token_info = decode_token_user_info(auth_token) if auth_token else None
+        is_owner = token_info and token_info.get("user_id") == ach.user_id
+        is_admin = token_info and token_info.get("role") in ("admin", "superadmin")
+        if not (is_owner or is_admin):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to access this private certificate evidence.",

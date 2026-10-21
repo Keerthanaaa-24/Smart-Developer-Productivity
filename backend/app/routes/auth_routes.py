@@ -187,19 +187,29 @@ async def login_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Enforce account active status
+    if not getattr(user, "is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Account has been suspended. Reason: {user.suspension_reason or 'Contact platform administrator.'}",
+        )
+
     import logging
     logging.getLogger("uvicorn.error").info(
-        f"[AUTH_DIAG] Login successful user_id={user.id} duration_ms={duration_ms}"
+        f"[AUTH_DIAG] Login successful user_id={user.id} role={getattr(user, 'role', 'student')} duration_ms={duration_ms}"
     )
 
-    # Record login history for authentic login streak calculation
-    try:
-        from app.services.login_streak_service import record_user_login
-        client_ip = request.client.host if request.client else None
-        user_agent = request.headers.get("user-agent", "")
-        record_user_login(db, user.id, ip_address=client_ip, user_agent=user_agent)
-    except Exception as login_rec_err:
-        print("Login streak recording warning:", login_rec_err)
+    user_role = getattr(user, "role", "student") or "student"
+
+    # Record login history for authentic developer login streak calculation (students only)
+    if user_role not in ("admin", "superadmin"):
+        try:
+            from app.services.login_streak_service import record_user_login
+            client_ip = request.client.host if request.client else None
+            user_agent = request.headers.get("user-agent", "")
+            record_user_login(db, user.id, ip_address=client_ip, user_agent=user_agent)
+        except Exception as login_rec_err:
+            print("Login streak recording warning:", login_rec_err)
 
     access_token = create_access_token(
         data={
@@ -207,6 +217,7 @@ async def login_user(
             "user_id": user.id,
             "email": user.email,
             "username": user.username,
+            "role": user_role,
         }
     )
 
@@ -217,6 +228,8 @@ async def login_user(
             "id": user.id,
             "username": user.username,
             "email": user.email,
+            "role": user_role,
+            "is_active": user.is_active,
         },
     }
 
@@ -242,6 +255,9 @@ def get_current_authenticated_user(
         "id": current_user.id,
         "username": current_user.username,
         "email": current_user.email,
+        "role": getattr(current_user, "role", "student") or "student",
+        "is_active": getattr(current_user, "is_active", True),
+        "suspension_reason": current_user.suspension_reason,
         "full_name": (settings.full_name if settings and settings.full_name else current_user.username) or current_user.username,
         "avatar_url": settings.avatar_url if settings and settings.avatar_url else None,
         "theme": settings.theme if settings and settings.theme else "light",

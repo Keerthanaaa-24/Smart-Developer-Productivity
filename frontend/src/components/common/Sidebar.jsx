@@ -13,7 +13,9 @@ import {
   FaChartLine,
   FaTrophy,
   FaAward,
+  FaUserShield,
 } from "react-icons/fa";
+import useAuth from "../../hooks/useAuth";
 
 const menuItems = [
   {
@@ -73,37 +75,38 @@ const menuItems = [
   },
 ];
 
-const SidebarContent = ({ onItemClick, isMobile = false }) => (
-  <div className="flex flex-col justify-between h-full">
-    <div>
-      <div className="mb-8 px-2 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center text-lg font-black shadow-md shadow-blue-500/20 shrink-0">
-            <FaRocket />
+const SidebarContent = ({ onItemClick, isMobile = false }) => {
+  return (
+    <div className="flex flex-col justify-between h-full">
+      <div>
+        <div className="mb-8 px-2 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center text-lg font-black shadow-md shadow-blue-500/20 shrink-0">
+              <FaRocket />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
+                Smart Dev
+              </h1>
+              <p className="text-[10px] uppercase font-bold tracking-wider text-blue-600 dark:text-blue-400 mt-1">
+                Productivity
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
-              Smart Dev
-            </h1>
-            <p className="text-[10px] uppercase font-bold tracking-wider text-blue-600 dark:text-blue-400 mt-1">
-              Productivity
-            </p>
-          </div>
+
+          {isMobile && (
+            <button
+              type="button"
+              onClick={onItemClick}
+              className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              aria-label="Close navigation"
+            >
+              <FaTimes className="text-lg" />
+            </button>
+          )}
         </div>
 
-        {isMobile && (
-          <button
-            type="button"
-            onClick={onItemClick}
-            className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-            aria-label="Close navigation"
-          >
-            <FaTimes className="text-lg" />
-          </button>
-        )}
-      </div>
-
-      <nav className="space-y-1.5" aria-label="Main Navigation">
+        <nav className="space-y-1.5" aria-label="Main Navigation">
         {menuItems.map((item) => (
           <NavLink
             key={item.path}
@@ -130,7 +133,8 @@ const SidebarContent = ({ onItemClick, isMobile = false }) => (
       </p>
     </div>
   </div>
-);
+  );
+};
 
 const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   return (

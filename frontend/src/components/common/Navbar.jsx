@@ -15,6 +15,7 @@ import {
   FaStopwatch,
   FaTrophy,
   FaBars,
+  FaUserShield,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
@@ -220,6 +221,9 @@ const Navbar = ({ onToggleMobileMenu = () => {} }) => {
 
   const profileName = auth?.user?.full_name || auth?.user?.username || userProfile.name;
   const profileImage = auth?.user?.avatar_url || userProfile.image;
+  const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const userRole = auth?.user?.role || storedUser?.role;
+  const isAdmin = userRole === "admin" || userRole === "superadmin";
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors duration-200">
@@ -248,7 +252,6 @@ const Navbar = ({ onToggleMobileMenu = () => {} }) => {
 
         {/* RIGHT CONTROLS */}
         <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">
-          
           {/* THEME SWITCH TOGGLE BUTTON */}
           <button
             id="btn-theme-toggle"

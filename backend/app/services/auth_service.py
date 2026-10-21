@@ -36,6 +36,9 @@ def create_user(
             username=user.username.strip(),
             email=str(user.email).strip().lower(),
             password=hashed_password,
+            role="student",
+            is_active=True,
+            suspension_reason=None,
         )
 
         db.add(db_user)

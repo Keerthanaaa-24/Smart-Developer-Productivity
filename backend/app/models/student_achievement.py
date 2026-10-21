@@ -48,9 +48,12 @@ class StudentAchievement(Base):
         nullable=False,
         default="self_reported",
         index=True,
-    )  # self_reported, evidence_uploaded, link_supplied, verified, rejected
+    )  # self_reported, evidence_uploaded, link_supplied, verified, rejected, correction_requested
     is_public = Column(Boolean, nullable=False, default=True)
     points_awarded = Column(Integer, nullable=False, default=0)
+    verification_notes = Column(Text, nullable=True)
+    verified_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    verified_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 

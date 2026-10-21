@@ -26,6 +26,7 @@ from app.models.personalized_recommendation import PersonalizedRecommendation
 from app.models.portfolio_profile import PortfolioProfile
 from app.models.point_transaction import PointTransaction
 from app.models.student_achievement import StudentAchievement
+from app.models.admin_audit_log import AdminAuditLog
 
 __all__ = [
     "User",
@@ -54,6 +55,7 @@ __all__ = [
     "PortfolioProfile",
     "PointTransaction",
     "StudentAchievement",
+    "AdminAuditLog",
 ]
 
 

@@ -65,6 +65,7 @@ from app.routes.portfolio_routes import router as portfolio_router
 from app.routes.career_impact_routes import router as career_impact_router
 from app.routes.leaderboard_routes import router as leaderboard_router
 from app.routes.achievement_routes import router as achievement_router
+from app.routes.admin_routes import router as admin_router
 
 
 
@@ -83,6 +84,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         import logging
         logging.getLogger("uvicorn.error").warning(f"Schema sync notice: {e}")
+
+    # Secure initial superadmin provisioning
+    try:
+        from app.core.database import SessionLocal
+        from app.core.admin_provision import provision_initial_admin
+        with SessionLocal() as db:
+            provision_initial_admin(db)
+    except Exception as admin_err:
+        import logging
+        logging.getLogger("uvicorn.error").warning(f"Admin provision notice: {admin_err}")
+
     yield
 
 
@@ -231,6 +243,10 @@ app.include_router(
 
 app.include_router(
     achievement_router
+)
+
+app.include_router(
+    admin_router
 )
 
 # Static file serving for certificate evidence (when local storage is used)

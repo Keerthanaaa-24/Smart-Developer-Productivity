@@ -124,13 +124,44 @@ def get_current_user(
     if user is None:
         raise credentials_exception
 
+    # Verify account is active
+    if not getattr(user, "is_active", True):
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been suspended. Please contact platform administration.",
+        )
+
     return user
+
+
+def get_current_admin_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Enforces that the current authenticated user has administrative privileges (admin or superadmin).
+    Strictly forbids access by standard students with HTTP 403.
+    """
+    if getattr(current_user, "role", "student") not in ("admin", "superadmin"):
+        raise HTTPException(
+            status_code=403,
+            detail="Administrative privileges required to access this resource.",
+        )
+    return current_user
 
 
 def decode_token_user_id(token: str) -> int | None:
     """
     Decodes a JWT token and returns user_id if valid, or None if expired/invalid.
     Used for query-param/header-authenticated downloads and media access.
+    """
+    info = decode_token_user_info(token)
+    return info.get("user_id") if info else None
+
+
+def decode_token_user_info(token: str) -> dict | None:
+    """
+    Decodes JWT payload returning a dict with user_id, email, username, and role.
+    Returns None if expired or invalid.
     """
     if not token or not isinstance(token, str):
         return None
@@ -141,11 +172,17 @@ def decode_token_user_id(token: str) -> int | None:
             algorithms=[ALGORITHM],
         )
         user_id = payload.get("user_id")
-        if user_id is not None:
-            return int(user_id)
-        sub = payload.get("sub")
-        if sub is not None and str(sub).isdigit():
-            return int(sub)
-        return None
+        if user_id is None:
+            sub = payload.get("sub")
+            if sub is not None and str(sub).isdigit():
+                user_id = int(sub)
+        if user_id is None:
+            return None
+        return {
+            "user_id": int(user_id),
+            "email": payload.get("email"),
+            "username": payload.get("username"),
+            "role": payload.get("role", "student"),
+        }
     except Exception:
         return None

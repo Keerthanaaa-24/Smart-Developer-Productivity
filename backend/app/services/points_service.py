@@ -88,6 +88,15 @@ def award_points(
     if points <= 0 or not clean_source_type or not clean_source_id:
         return None
 
+    # Do not allow admin/superadmin accounts to accumulate student productivity points
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if target_user and getattr(target_user, "role", "student") in ("admin", "superadmin"):
+        logger.info(
+            f"[PointsService] Skipping point award ({points} pts for {clean_source_type}) "
+            f"for administrative account {target_user.username} (ID: {user_id})"
+        )
+        return None
+
     # 1. Fast check if already awarded
     existing = (
         db.query(PointTransaction)

@@ -20,7 +20,7 @@ import app.models  # Ensures all models are registered on Base.metadata
 
 logger = logging.getLogger("uvicorn.error")
 
-MIGRATION_VERSION = "2026_10_phase5_competition_v1"
+MIGRATION_VERSION = "2026_10_phase6_admin_v1"
 
 
 def _acquire_advisory_lock(conn, dialect_name: str) -> bool:
@@ -142,6 +142,17 @@ def sync_database_schema(target_engine: Engine = None, force: bool = False) -> i
                                 default_clause = f" DEFAULT {val}"
                             elif isinstance(val, str):
                                 default_clause = f" DEFAULT '{val}'"
+                        elif col.server_default is not None:
+                            sval = getattr(col.server_default, "arg", None)
+                            if sval is not None:
+                                text_val = str(sval).strip()
+                                if "now" in text_val.lower() or "current_timestamp" in text_val.lower():
+                                    default_clause = " DEFAULT CURRENT_TIMESTAMP"
+                                elif text_val.isdigit():
+                                    default_clause = f" DEFAULT {text_val}"
+                                else:
+                                    clean_sval = text_val.strip("'\"")
+                                    default_clause = f" DEFAULT '{clean_sval}'"
 
                         # Safe nullability: allow NULL or apply default if NOT NULL
                         null_clause = " NOT NULL" if (not col.nullable and default_clause) else " NULL"

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,15 @@ router = APIRouter(
 )
 
 
+def _ensure_student_user(user: User):
+    """Guarantees that admins do not participate in student developer productivity tracking."""
+    if getattr(user, "role", "student") in ("admin", "superadmin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrative accounts do not participate in student developer tracking. Please use the Admin Console at /admin.",
+        )
+
+
 # =====================================================
 # DASHBOARD OVERVIEW (COMMAND CENTER 2.0)
 # =====================================================
@@ -32,6 +41,7 @@ def dashboard_overview(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    _ensure_student_user(current_user)
     import time
     import logging
     t0 = time.monotonic()
@@ -57,6 +67,7 @@ def dashboard_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    _ensure_student_user(current_user)
     import time
     import logging
     t0 = time.monotonic()
@@ -81,6 +92,7 @@ def weekly_productivity(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    _ensure_student_user(current_user)
     if not refresh:
         cached = user_cache.get(current_user.id, "weekly_productivity")
         if cached is not None:

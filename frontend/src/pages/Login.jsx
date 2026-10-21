@@ -95,7 +95,12 @@ const Login = () => {
           auth.login(data.access_token, userData);
         }
 
-        navigate("/dashboard");
+        const userRole = (userData?.role || "").toLowerCase();
+        if (userRole === "admin" || userRole === "superadmin") {
+          navigate("/admin", { replace: true });
+        } else {
+          navigate("/dashboard", { replace: true });
+        }
       } else {
         throw new Error("No access token returned by server");
       }
@@ -258,11 +263,19 @@ const Login = () => {
           )}
         </button>
 
-        <div className="text-center text-sm text-slate-500 pt-2">
-          Don't have an account?{" "}
-          <Link to="/register" className="text-blue-600 font-semibold hover:underline">
-            Register here
-          </Link>
+        <div className="text-center text-sm text-slate-500 pt-2 flex flex-col gap-2.5">
+          <div>
+            Don't have an account?{" "}
+            <Link to="/register" className="text-blue-600 font-semibold hover:underline">
+              Register here
+            </Link>
+          </div>
+          <div className="pt-2 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+            Platform Administrator?{" "}
+            <Link to="/admin/login" className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
+              Sign in to Admin Console →
+            </Link>
+          </div>
         </div>
       </form>
     </AuthLayout>

@@ -33,6 +33,38 @@ const CareerImpact = lazy(() => import("./pages/CareerImpact"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard"));
 const Achievements = lazy(() => import("./pages/Achievements"));
 
+// Admin Dashboard & Governance Pages (Lazy Loaded)
+const AdminLogin = lazy(() => import("./pages/admin/AdminLogin"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminStudents = lazy(() => import("./pages/admin/AdminStudents"));
+const AdminAuditing = lazy(() => import("./pages/admin/AdminAuditing"));
+const AdminAchievements = lazy(() => import("./pages/admin/AdminAchievements"));
+const AdminHealth = lazy(() => import("./pages/admin/AdminHealth"));
+const AdminAnalytics = lazy(() => import("./pages/admin/AdminAnalytics"));
+const AdminAuditLogs = lazy(() => import("./pages/admin/AdminAuditLogs"));
+
+// Intelligent Role-Aware Redirect
+const RoleRedirect = () => {
+  const token =
+    localStorage.getItem("token") ||
+    localStorage.getItem("access_token");
+
+  if (!token || token === "null" || token === "undefined") {
+    return <Navigate to="/login" replace />;
+  }
+
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const role = (user?.role || "").toLowerCase();
+    if (role === "admin" || role === "superadmin") {
+      return <Navigate to="/admin" replace />;
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return <Navigate to="/dashboard" replace />;
+};
+
 // Responsive route loading skeleton
 const PageLoadingFallback = () => (
   <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col p-6 sm:p-8 space-y-6">
@@ -61,16 +93,17 @@ const App = () => {
                 ===================================================== */}
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/portfolio/:slug" element={<PublicPortfolio />} />
 
                 {/* =====================================================
-                    APPLICATION ROUTES (PROTECTED)
+                    APPLICATION ROUTES (PROTECTED - STUDENTS ONLY)
                 ===================================================== */}
                 <Route
                   path="/dashboard"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <Dashboard />
                     </ProtectedRoute>
                   }
@@ -79,7 +112,7 @@ const App = () => {
                 <Route
                   path="/leaderboard"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <Leaderboard />
                     </ProtectedRoute>
                   }
@@ -88,7 +121,7 @@ const App = () => {
                 <Route
                   path="/achievements"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <Achievements />
                     </ProtectedRoute>
                   }
@@ -97,7 +130,7 @@ const App = () => {
                 <Route
                   path="/projects"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <Projects />
                     </ProtectedRoute>
                   }
@@ -106,7 +139,7 @@ const App = () => {
                 <Route
                   path="/activity"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <Activity />
                     </ProtectedRoute>
                   }
@@ -115,7 +148,7 @@ const App = () => {
                 <Route
                   path="/analytics"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <Analytics />
                     </ProtectedRoute>
                   }
@@ -124,7 +157,7 @@ const App = () => {
                 <Route
                   path="/tasks"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <Tasks />
                     </ProtectedRoute>
                   }
@@ -133,7 +166,7 @@ const App = () => {
                 <Route
                   path="/pomodoro"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <Pomodoro />
                     </ProtectedRoute>
                   }
@@ -142,7 +175,7 @@ const App = () => {
                 <Route
                   path="/profile"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <Profile />
                     </ProtectedRoute>
                   }
@@ -151,7 +184,7 @@ const App = () => {
                 <Route
                   path="/settings"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <Settings />
                     </ProtectedRoute>
                   }
@@ -160,7 +193,7 @@ const App = () => {
                 <Route
                   path="/github"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <GithubIntegration />
                     </ProtectedRoute>
                   }
@@ -169,7 +202,7 @@ const App = () => {
                 <Route
                   path="/portfolio"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <Portfolio />
                     </ProtectedRoute>
                   }
@@ -178,16 +211,82 @@ const App = () => {
                 <Route
                   path="/career-impact"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute studentOnly={true}>
                       <CareerImpact />
                     </ProtectedRoute>
                   }
                 />
 
                 {/* =====================================================
-                    FALLBACK
+                    ADMIN ROUTES (PROTECTED - ADMIN AUTHORIZATION REQUIRED)
                 ===================================================== */}
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute adminOnly={true}>
+                      <AdminDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/admin/students"
+                  element={
+                    <ProtectedRoute adminOnly={true}>
+                      <AdminStudents />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/admin/audit"
+                  element={
+                    <ProtectedRoute adminOnly={true}>
+                      <AdminAuditing />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/admin/achievements"
+                  element={
+                    <ProtectedRoute adminOnly={true}>
+                      <AdminAchievements />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/admin/health"
+                  element={
+                    <ProtectedRoute adminOnly={true}>
+                      <AdminHealth />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/admin/analytics"
+                  element={
+                    <ProtectedRoute adminOnly={true}>
+                      <AdminAnalytics />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/admin/logs"
+                  element={
+                    <ProtectedRoute adminOnly={true}>
+                      <AdminAuditLogs />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* =====================================================
+                    FALLBACK (INTELLIGENT ROLE-BASED REDIRECT)
+                ===================================================== */}
+                <Route path="*" element={<RoleRedirect />} />
               </Routes>
             </Suspense>
           </BrowserRouter>

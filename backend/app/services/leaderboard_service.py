@@ -103,6 +103,7 @@ def get_leaderboard(
         .outerjoin(ach_subq, ach_subq.c.user_id == User.id)
         .outerjoin(act_subq, act_subq.c.user_id == User.id)
         .filter(
+            User.role.notin_(["admin", "superadmin"]),
             ~User.email.like("%@example.com"),
             ~User.email.like("%@test.com"),
         )
@@ -196,6 +197,37 @@ def get_student_leaderboard_position(
     period_lower = (period or "all_time").lower().strip()
     since_dt = _get_period_filter_clause(period_lower)
 
+    # 0. Check if user is an administrator
+    user = db.query(User).filter(User.id == user_id).first()
+    if user and getattr(user, "role", "student") in ("admin", "superadmin"):
+        total_students = (
+            db.query(User)
+            .filter(
+                User.role.notin_(["admin", "superadmin"]),
+                ~User.email.like("%@example.com"),
+                ~User.email.like("%@test.com"),
+            )
+            .count()
+        )
+        return {
+            "user_id": user_id,
+            "rank": None,
+            "total_students": total_students,
+            "display_name": "Platform Administrator",
+            "username": user.username,
+            "avatar_url": "",
+            "points": 0,
+            "level": 0,
+            "level_title": "Platform Administrator (Not Ranked)",
+            "level_progress_percentage": 0,
+            "next_level_points": None,
+            "total_active_days": 0,
+            "achievement_count": 0,
+            "period": period_lower,
+            "is_admin": True,
+            "message": "Administrative accounts are excluded from student competition rankings.",
+        }
+
     # Reconcile verified historical actions if no points ledger transactions exist yet
     has_points = (
         db.query(PointTransaction.id)
@@ -248,6 +280,7 @@ def get_student_leaderboard_position(
         .outerjoin(act_subq, act_subq.c.user_id == User.id)
         .filter(
             User.id != user_id,
+            User.role.notin_(["admin", "superadmin"]),
             ~User.email.like("%@example.com"),
             ~User.email.like("%@test.com"),
             or_(
@@ -270,6 +303,7 @@ def get_student_leaderboard_position(
     total_students = (
         db.query(User)
         .filter(
+            User.role.notin_(["admin", "superadmin"]),
             ~User.email.like("%@example.com"),
             ~User.email.like("%@test.com"),
         )
@@ -277,7 +311,6 @@ def get_student_leaderboard_position(
     )
 
     # User profile & achievements
-    user = db.query(User).filter(User.id == user_id).first()
     settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
     ach_count = db.query(StudentAchievement).filter(StudentAchievement.user_id == user_id).count()
 
