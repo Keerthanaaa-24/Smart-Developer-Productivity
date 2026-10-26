@@ -1159,6 +1159,10 @@ def record_extension_activities(
 
         # Resolve project association
         matched_project_id = item.get("project_id")
+        if matched_project_id:
+            p_check = db.query(Project).filter(Project.id == matched_project_id, Project.user_id == user_id).first()
+            if not p_check:
+                matched_project_id = None
         if not matched_project_id:
             workspace_name = item.get("workspace_name")
             if not workspace_name and item.get("title") and "in " in str(item.get("title")):

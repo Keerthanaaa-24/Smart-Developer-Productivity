@@ -18,6 +18,7 @@ router = APIRouter(
 
 
 @router.get("", summary="Get global student leaderboard with period filters and search")
+@router.get("/", include_in_schema=False)
 def read_leaderboard(
     period: str = Query("all_time", pattern="^(all_time|monthly|weekly)$"),
     page: int = Query(1, ge=1),

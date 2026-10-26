@@ -38,6 +38,7 @@ def serialize_task(task):
     }
 
 
+@router.post("", include_in_schema=False)
 @router.post("/")
 def add_task(
     task: TaskCreate,
@@ -57,6 +58,7 @@ def add_task(
     }
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 def all_tasks(
     limit: int = Query(default=100, ge=1, le=500),

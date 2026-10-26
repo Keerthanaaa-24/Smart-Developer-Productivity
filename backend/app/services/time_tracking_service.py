@@ -13,12 +13,14 @@ from fastapi import HTTPException, status
 from app.models.browser_time_session import BrowserTimeSession
 from app.models.developer_activity import DeveloperActivity
 from app.models.user_settings import UserSettings
+from app.models.project import Project
 from app.core.cache import user_cache
 from app.services.provider_registry import provider_registry, PROVIDER_CAPABILITY_REGISTRY
 from app.services.unified_activity_service import (
     record_unified_activity,
     normalize_category,
     is_activity_tracking_enabled,
+    get_user_local_today,
 )
 
 # Supported platform domains map
@@ -232,9 +234,34 @@ class TimeTrackingService:
             category = SUPPORTED_PLATFORMS_MAP[platform_key]["category"]
             platform_name = SUPPORTED_PLATFORMS_MAP[platform_key]["name"]
 
+            # Resolve project association
+            matched_project_id = raw.get("project_id")
+            if matched_project_id:
+                p_check = db.query(Project).filter(Project.id == matched_project_id, Project.user_id == user_id).first()
+                if not p_check:
+                    matched_project_id = None
+            if not matched_project_id:
+                ws_name = raw.get("workspace_name")
+                if not ws_name and raw.get("title") and "in " in str(raw.get("title")):
+                    ws_name = str(raw.get("title")).split("in ", 1)[1].strip()
+                if ws_name:
+                    p_match = (
+                        db.query(Project)
+                        .filter(
+                            Project.user_id == user_id,
+                            Project.name.ilike(ws_name.strip()),
+                        )
+                        .first()
+                    )
+                    if p_match:
+                        matched_project_id = p_match.id
+
+            act_date = started_at.date() if started_at else get_user_local_today(db, user_id)
+
             record_unified_activity(
                 db=db,
                 user_id=user_id,
+                project_id=matched_project_id,
                 platform=platform_key,
                 category=category,
                 activity_type="platform_session",
@@ -244,8 +271,8 @@ class TimeTrackingService:
                 duration_seconds=active_seconds,
                 started_at=started_at,
                 ended_at=ended_at,
-                activity_date=started_at.date(),
-                source="browser_extension",
+                activity_date=act_date,
+                source=source,
                 external_id=f"bts_{session_key}",
                 activity_count=1,
             )
@@ -276,7 +303,7 @@ class TimeTrackingService:
         Calculates today, weekly, and monthly active website time metrics,
         comparison against user goals, and most used platform.
         """
-        today = date.today()
+        today = get_user_local_today(db, user_id)
         start_week = today - timedelta(days=6)
         start_month = today - timedelta(days=29)
 

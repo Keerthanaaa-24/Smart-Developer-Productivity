@@ -42,6 +42,45 @@ class CancelSessionRequest(BaseModel):
     elapsed_seconds: int = 0
 
 
+class QuickPomodoroSessionRequest(BaseModel):
+    duration_minutes: int | None = 25
+    planned_duration_seconds: int | None = None
+    actual_duration_seconds: int | None = None
+    session_type: str = "focus"
+    completed: bool = True
+    task_id: int | None = None
+
+
+@router.post("/session")
+def record_quick_session(
+    payload: QuickPomodoroSessionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    duration_secs = (
+        payload.actual_duration_seconds
+        or payload.planned_duration_seconds
+        or ((payload.duration_minutes or 25) * 60)
+    )
+    st = "focus" if payload.session_type in ("focus", "work") else payload.session_type
+    session = start_pomodoro_session(
+        db=db,
+        user_id=current_user.id,
+        task_id=payload.task_id,
+        session_type=st,
+        planned_duration_seconds=duration_secs,
+    )
+    if payload.completed and session and "id" in session:
+        completed = complete_pomodoro_session(
+            db=db,
+            user_id=current_user.id,
+            session_id=session["id"],
+            actual_duration_seconds=duration_secs,
+        )
+        return completed or session
+    return session
+
+
 @router.post("/session/start")
 def start_session(
     payload: StartSessionRequest,

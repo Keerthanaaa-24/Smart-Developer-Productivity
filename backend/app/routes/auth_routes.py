@@ -105,13 +105,19 @@ def register_user(
             detail=f"Registration failed: {str(e)}",
         )
 
+    from app.core.jwt_handler import create_access_token
+    token = create_access_token(data={"sub": str(new_user.id), "username": new_user.username, "role": new_user.role})
+
     return {
         "success": True,
         "message": "User registered successfully",
+        "access_token": token,
+        "token_type": "bearer",
         "user": {
             "id": new_user.id,
             "username": new_user.username,
             "email": new_user.email,
+            "role": new_user.role,
         },
     }
 

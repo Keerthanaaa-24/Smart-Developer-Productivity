@@ -10,6 +10,12 @@ import urllib.parse
 import urllib.error
 from datetime import datetime, timedelta
 
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 API_BASE = "http://127.0.0.1:8001"
 
 def make_req(url, method="GET", data=None, headers=None, form_data=None):

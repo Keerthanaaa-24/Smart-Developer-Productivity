@@ -98,7 +98,8 @@ def weekly_productivity(
         if cached is not None:
             return cached
 
-    today = date.today()
+    from app.services.unified_activity_service import get_user_local_today
+    today = get_user_local_today(db, current_user.id)
     start_date = today - timedelta(days=6)
 
     # Single grouped query for 7-day range

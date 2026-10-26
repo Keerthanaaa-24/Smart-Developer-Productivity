@@ -13,6 +13,7 @@ router = APIRouter(
 )
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 def get_notifications(
     limit: int = Query(20, ge=1, le=100),
@@ -95,6 +96,7 @@ def delete_single_notification(
     return {"success": True, "message": "Notification deleted"}
 
 
+@router.delete("", include_in_schema=False)
 @router.delete("/")
 def clear_all_notifications(
     only_read: bool = Query(False),

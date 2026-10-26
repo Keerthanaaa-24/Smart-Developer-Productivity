@@ -1,5 +1,5 @@
 from datetime import date
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from app.services.unified_activity_service import (
     get_career_summary,
     create_manual_activity,
     record_extension_activities,
+    get_user_local_today,
 )
 from app.services.platform_sync_service import platform_sync_service
 
@@ -47,6 +48,8 @@ class ExtensionActivityItem(BaseModel):
     duration_seconds: int = Field(default=0, ge=0, le=86400)
     source: str = "browser_extension"
     extension_event_id: str | None = None
+    project_id: int | None = None
+    workspace_name: str | None = None
 
 
 class ExtensionSyncRequest(BaseModel):
@@ -168,12 +171,13 @@ def today_activities(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    today = get_user_local_today(db, current_user.id)
     return get_unified_activities(
         db=db,
         user_id=current_user.id,
         limit=50,
         offset=0,
-        date_filter=date.today(),
+        date_filter=today,
     )
 
 

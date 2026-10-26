@@ -186,7 +186,11 @@ def get_dashboard_stats(
     github_score = 0
 
     if github:
-        github_score = 25
+        gh_acts = db.query(func.coalesce(func.sum(DeveloperActivity.activity_count), 0)).filter(
+            DeveloperActivity.user_id == user_id,
+            DeveloperActivity.platform == "github",
+        ).scalar() or 0
+        github_score = min(100, 25 + int(gh_acts) * 3)
 
     # =====================================================
     # FREECODECAMP

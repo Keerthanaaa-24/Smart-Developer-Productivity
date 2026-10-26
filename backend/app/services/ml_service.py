@@ -263,7 +263,7 @@ class MLProductivityService:
         prediction = predictor.predict(features)
 
         if save_to_db and prediction.get("predicted_productivity_score") is not None:
-            today = date.today()
+            today = get_user_local_today(db, user_id)
             existing = db.query(ProductivityPrediction).filter(
                 ProductivityPrediction.user_id == user_id,
                 ProductivityPrediction.prediction_date == today,

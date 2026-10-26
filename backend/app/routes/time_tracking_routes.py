@@ -41,6 +41,8 @@ class SessionSyncItem(BaseModel):
     idle_seconds: int = Field(default=0, ge=0, description="Excluded idle seconds")
     session_key: Optional[str] = None
     source: Optional[str] = "browser_extension"
+    project_id: Optional[int] = None
+    workspace_name: Optional[str] = None
 
 
 class SessionBatchSyncRequest(BaseModel):
