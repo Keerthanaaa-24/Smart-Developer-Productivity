@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import AuthLayout from "../layouts/AuthLayout";
-import { loginUser } from "../api/authApi";
+import { loginUser, checkBackendHealth } from "../api/authApi";
 import useAuth from "../hooks/useAuth";
 
 const Login = () => {
@@ -18,6 +18,22 @@ const Login = () => {
     username: "",
     password: "",
   });
+
+  // Proactively pre-warm backend when user navigates to the login screen
+  useEffect(() => {
+    let isMounted = true;
+    checkBackendHealth(1, 1500)
+      .then((res) => {
+        if (isMounted && res?.ok) {
+          setServerStatus("idle");
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Listen for backend connection status events
   useEffect(() => {

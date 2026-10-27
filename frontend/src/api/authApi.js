@@ -9,6 +9,7 @@ export const loginUser = async (userData) => {
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
     },
+    timeout: 45000,
   });
 
   return response.data;

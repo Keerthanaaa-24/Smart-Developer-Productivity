@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { FaShieldAlt, FaLock, FaUserShield, FaExclamationTriangle, FaArrowLeft } from "react-icons/fa";
-import { loginUser } from "../../api/authApi";
+import { loginUser, checkBackendHealth } from "../../api/authApi";
 import useAuth from "../../hooks/useAuth";
 
 const AdminLogin = () => {
@@ -15,6 +15,11 @@ const AdminLogin = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Proactively pre-warm backend when administrator opens the login screen
+  useEffect(() => {
+    checkBackendHealth(1, 1500).catch(() => {});
+  }, []);
 
   // Check if already authenticated
   useEffect(() => {

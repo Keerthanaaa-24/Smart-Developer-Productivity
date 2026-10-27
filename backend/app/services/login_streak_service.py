@@ -34,7 +34,6 @@ def record_user_login(
     )
     db.add(login_entry)
     db.commit()
-    db.refresh(login_entry)
     return login_entry
 
 

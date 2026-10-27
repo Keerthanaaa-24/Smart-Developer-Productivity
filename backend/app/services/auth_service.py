@@ -71,23 +71,32 @@ def authenticate_user(
 
     clean_username = username.strip()
 
-    # 1. Fast indexed query first (avoids full table scan on case-insensitive expression)
-    user = (
-        db.query(User)
-        .filter(
-            (User.email == clean_username)
-            | (User.username == clean_username)
-        )
-        .first()
-    )
+    # 1. Fast direct single-index query (avoids multi-column OR index merge overhead)
+    user = None
+    if "@" in clean_username:
+        user = db.query(User).filter(User.email == clean_username).first()
+    else:
+        user = db.query(User).filter(User.username == clean_username).first()
 
-    # 2. Case-insensitive fallback if exact match wasn't found
+    # 2. Combined fallback if single-index exact match wasn't found
     if not user:
         user = (
             db.query(User)
             .filter(
-                (func.lower(User.email) == clean_username.lower())
-                | (func.lower(User.username) == clean_username.lower())
+                (User.email == clean_username)
+                | (User.username == clean_username)
+            )
+            .first()
+        )
+
+    # 3. Case-insensitive fallback if exact match wasn't found
+    if not user:
+        clean_lower = clean_username.lower()
+        user = (
+            db.query(User)
+            .filter(
+                (func.lower(User.email) == clean_lower)
+                | (func.lower(User.username) == clean_lower)
             )
             .first()
         )

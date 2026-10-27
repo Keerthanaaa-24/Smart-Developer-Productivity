@@ -160,9 +160,11 @@ async def login_user(
         )
 
     import time
+    from starlette.concurrency import run_in_threadpool
     t0 = time.monotonic()
     try:
-        user = authenticate_user(
+        user = await run_in_threadpool(
+            authenticate_user,
             db,
             username,
             password,
@@ -213,7 +215,13 @@ async def login_user(
             from app.services.login_streak_service import record_user_login
             client_ip = request.client.host if request.client else None
             user_agent = request.headers.get("user-agent", "")
-            record_user_login(db, user.id, ip_address=client_ip, user_agent=user_agent)
+            await run_in_threadpool(
+                record_user_login,
+                db,
+                user.id,
+                ip_address=client_ip,
+                user_agent=user_agent,
+            )
         except Exception as login_rec_err:
             print("Login streak recording warning:", login_rec_err)
 
