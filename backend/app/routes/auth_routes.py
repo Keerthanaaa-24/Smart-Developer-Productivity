@@ -1,5 +1,6 @@
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     HTTPException,
     Request,
@@ -122,6 +123,29 @@ def register_user(
     }
 
 
+def _record_login_in_background(user_id: int, client_ip: str | None, user_agent: str | None):
+    """
+    Asynchronously records login streak history using a dedicated database session.
+    Guarantees that login streak database operations never block the authentication
+    HTTP response or contend for the request's database session across threads.
+    """
+    try:
+        from app.core.database import SessionLocal
+        from app.services.login_streak_service import record_user_login
+        with SessionLocal() as db_streak:
+            record_user_login(
+                db_streak,
+                user_id,
+                ip_address=client_ip,
+                user_agent=user_agent,
+            )
+    except Exception as bg_err:
+        import logging
+        logging.getLogger("uvicorn.error").warning(
+            f"[AUTH_DIAG] Background login streak recording notice: {bg_err}"
+        )
+
+
 # =========================================================
 # LOGIN (Compatible with Swagger OAuth2 Form & JSON Clients)
 # =========================================================
@@ -129,6 +153,7 @@ def register_user(
 @router.post("/login")
 async def login_user(
     request: Request,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
 ):
     content_type = request.headers.get("content-type", "")
@@ -209,21 +234,21 @@ async def login_user(
 
     user_role = getattr(user, "role", "student") or "student"
 
-    # Record login history for authentic developer login streak calculation (students only)
+    # Safely record login history for developer streak calculation (students only)
+    # Uses background tasks or dedicated session so it never delays authentication response
     if user_role not in ("admin", "superadmin"):
-        try:
-            from app.services.login_streak_service import record_user_login
-            client_ip = request.client.host if request.client else None
-            user_agent = request.headers.get("user-agent", "")
-            await run_in_threadpool(
-                record_user_login,
-                db,
+        client_ip = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent", "")
+        if background_tasks is not None:
+            background_tasks.add_task(
+                _record_login_in_background,
                 user.id,
-                ip_address=client_ip,
-                user_agent=user_agent,
+                client_ip,
+                user_agent,
             )
-        except Exception as login_rec_err:
-            print("Login streak recording warning:", login_rec_err)
+        else:
+            # Fallback for environments where background_tasks parameter is omitted
+            _record_login_in_background(user.id, client_ip, user_agent)
 
     access_token = create_access_token(
         data={
@@ -291,10 +316,11 @@ def get_user_login_streak(
 @router.post("/token")
 async def token_endpoint(
     request: Request,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
 ):
     """Alias for /auth/login providing standard OAuth2 token endpoint compatibility."""
-    return await login_user(request, db)
+    return await login_user(request, background_tasks, db)
 
 
 # =========================================================

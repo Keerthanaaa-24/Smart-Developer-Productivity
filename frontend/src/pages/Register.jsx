@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import AuthLayout from "../layouts/AuthLayout";
 import { registerUser } from "../api/authApi";
@@ -17,6 +17,14 @@ const Register = () => {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
+  const abortCtrlRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (abortCtrlRef.current) abortCtrlRef.current.abort();
+    };
+  }, []);
+
   const handleChange = (e) => {
     setErrorMsg("");
     setSuccessMsg("");
@@ -27,7 +35,11 @@ const Register = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
+
+    // STRICT LOCK: Prevent concurrent or duplicate form submissions
+    if (loading) return;
+
     const cleanUsername = formData.username.trim();
     const cleanEmail = formData.email.trim().toLowerCase();
     const password = formData.password;
@@ -47,24 +59,53 @@ const Register = () => {
       return;
     }
 
+    if (abortCtrlRef.current) {
+      abortCtrlRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortCtrlRef.current = controller;
+
     setLoading(true);
     setErrorMsg("");
     setSuccessMsg("");
 
     try {
-      const response = await registerUser({
-        username: cleanUsername,
-        email: cleanEmail,
-        password: password,
-      });
+      const response = await registerUser(
+        {
+          username: cleanUsername,
+          email: cleanEmail,
+          password: password,
+        },
+        { signal: controller.signal }
+      );
 
       setSuccessMsg(response?.message || "Registration successful! Redirecting to login...");
       setTimeout(() => {
         navigate("/login");
       }, 1500);
     } catch (error) {
+      if (controller.signal.aborted) {
+        return; // Request was aborted cleanly, ignore
+      }
       console.error("Registration failed:", error);
-      if (error.friendlyMessage) {
+      const status = error.response?.status;
+      const isTimeout =
+        error.code === "ECONNABORTED" ||
+        (typeof error.message === "string" && error.message.toLowerCase().includes("timeout"));
+      const isNetwork =
+        !error.response &&
+        (typeof error.message === "string" && (error.message.includes("Network Error") || error.code === "ERR_NETWORK"));
+
+      if (status === 400) {
+        const detail = error.response?.data?.detail;
+        setErrorMsg(typeof detail === "string" ? detail : "Account with this username or email already exists.");
+      } else if (status === 429) {
+        setErrorMsg("Too many attempts. Please slow down and try again shortly.");
+      } else if (status === 503) {
+        setErrorMsg(error.response?.data?.detail || "Database service is warming up or temporarily unreachable. Please retry shortly.");
+      } else if (isTimeout || isNetwork || [502, 504].includes(status)) {
+        setErrorMsg("Registration request timed out while contacting server. Backend service may be warming up. Please try again.");
+      } else if (error.friendlyMessage) {
         setErrorMsg(error.friendlyMessage);
       } else {
         let detail = error.response?.data?.detail;
@@ -73,9 +114,7 @@ const Register = () => {
         } else if (typeof detail === "object" && detail !== null) {
           detail = detail.msg || JSON.stringify(detail);
         } else if (!detail) {
-          detail = error.message && !error.message.includes("timeout")
-            ? error.message
-            : "Registration request timed out. Please check your connection and try again.";
+          detail = "Registration failed. Please check your information and try again.";
         }
         setErrorMsg(detail);
       }
@@ -113,9 +152,10 @@ const Register = () => {
             name="username"
             value={formData.username}
             placeholder="Choose a username (min 3 chars)"
-            className="w-full border border-slate-300 p-3.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="w-full border border-slate-300 p-3.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed transition"
             onChange={handleChange}
             autoComplete="username"
+            disabled={loading}
             required
           />
         </div>
@@ -130,9 +170,10 @@ const Register = () => {
             name="email"
             value={formData.email}
             placeholder="name@example.com"
-            className="w-full border border-slate-300 p-3.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="w-full border border-slate-300 p-3.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed transition"
             onChange={handleChange}
             autoComplete="email"
+            disabled={loading}
             required
           />
         </div>
@@ -148,16 +189,18 @@ const Register = () => {
               name="password"
               value={formData.password}
               placeholder="Create a password (min 6 chars)"
-              className="w-full border border-slate-300 p-3.5 rounded-lg pr-12 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="w-full border border-slate-300 p-3.5 rounded-lg pr-12 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed transition"
               onChange={handleChange}
               autoComplete="new-password"
+              disabled={loading}
               required
             />
             <button
               type="button"
               id="register-toggle-password"
+              disabled={loading}
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               {showPassword ? "🙈" : "👁️"}
             </button>

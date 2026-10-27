@@ -125,12 +125,12 @@ if parsed_url.drivername.startswith("sqlite"):
     engine_kwargs["connect_args"] = connect_args
 else:
     # Set bounded, resilient timeouts to protect against cold-start hangs
-    connect_args["connect_timeout"] = int(os.getenv("DB_CONNECT_TIMEOUT", 7))
+    connect_args["connect_timeout"] = int(os.getenv("DB_CONNECT_TIMEOUT", 8))
 
     # Clean unsupported query parameters if copied from Aiven / MySQL CLI (e.g. ssl-mode=REQUIRED)
     if "mysql" in parsed_url.drivername:
-        connect_args["read_timeout"] = int(os.getenv("DB_READ_TIMEOUT", 10))
-        connect_args["write_timeout"] = int(os.getenv("DB_WRITE_TIMEOUT", 10))
+        connect_args["read_timeout"] = int(os.getenv("DB_READ_TIMEOUT", 15))
+        connect_args["write_timeout"] = int(os.getenv("DB_WRITE_TIMEOUT", 15))
 
         query_params = dict(parsed_url.query)
         has_ssl_mode = query_params.pop("ssl-mode", None) or query_params.pop("ssl_mode", None)

@@ -74,16 +74,17 @@ def authenticate_user(
     # 1. Fast direct single-index query (avoids multi-column OR index merge overhead)
     user = None
     if "@" in clean_username:
-        user = db.query(User).filter(User.email == clean_username).first()
+        user = db.query(User).filter(User.email == clean_username.lower()).first()
     else:
         user = db.query(User).filter(User.username == clean_username).first()
 
     # 2. Combined fallback if single-index exact match wasn't found
     if not user:
+        clean_lower = clean_username.lower()
         user = (
             db.query(User)
             .filter(
-                (User.email == clean_username)
+                (User.email == clean_lower)
                 | (User.username == clean_username)
             )
             .first()

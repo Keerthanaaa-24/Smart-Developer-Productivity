@@ -39,34 +39,45 @@ const getRequestKey = (config) => {
 
 API.interceptors.request.use(
   (config) => {
+    const url = config.url || "";
+    const isAuthEndpoint =
+      url.includes("/auth/login") ||
+      url.includes("/auth/register");
+
     const token =
       localStorage.getItem("token") ||
       localStorage.getItem("access_token");
 
-    if (token && token !== "null" && token !== "undefined") {
+    // Only attach bearer token to authenticated application endpoints
+    if (!isAuthEndpoint && token && token !== "null" && token !== "undefined") {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
+    } else if (isAuthEndpoint && config.headers?.Authorization) {
+      delete config.headers.Authorization;
     }
 
     const method = (config.method || "get").toLowerCase();
-    // In-flight deduplication for safe idempotent GET requests
+    // In-flight deduplication for safe idempotent GET requests only
     if (method === "get" && !config.skipDeduplication) {
       const key = getRequestKey(config);
       if (inFlightRequests.has(key)) {
         config.adapter = () => inFlightRequests.get(key);
       } else {
-        let defaultAdapter = null;
+        const baseAdapter = config._baseAdapter || config.adapter || axios.defaults.adapter;
+        config._baseAdapter = baseAdapter;
+
+        let resolvedAdapter = null;
         try {
-          defaultAdapter = axios.getAdapter
-            ? axios.getAdapter(config.adapter || axios.defaults.adapter)
-            : (typeof config.adapter === "function" ? config.adapter : null);
+          resolvedAdapter = axios.getAdapter
+            ? axios.getAdapter(baseAdapter)
+            : (typeof baseAdapter === "function" ? baseAdapter : null);
         } catch {
-          defaultAdapter = null;
+          resolvedAdapter = null;
         }
 
-        if (typeof defaultAdapter === "function") {
+        if (typeof resolvedAdapter === "function") {
           config.adapter = async (cfg) => {
-            const promise = defaultAdapter(cfg);
+            const promise = resolvedAdapter(cfg);
             inFlightRequests.set(key, promise);
             try {
               return await promise;
@@ -114,7 +125,10 @@ API.interceptors.response.use(
 
     // 1. Session Expiration (401 Unauthorized on protected routes)
     if (status === 401) {
-      const isAuthRequest = url.includes("/auth/login") || url.includes("/auth/register");
+      const isAuthRequest =
+        url.includes("/auth/login") ||
+        url.includes("/auth/register") ||
+        url.includes("/auth/token");
       
       if (!isAuthRequest) {
         console.warn("401 Unauthorized on protected route - session expired.");
@@ -125,6 +139,7 @@ API.interceptors.response.use(
         if (
           typeof window !== "undefined" &&
           window.location.pathname !== "/login" &&
+          window.location.pathname !== "/admin/login" &&
           window.location.pathname !== "/register" &&
           window.location.pathname !== "/"
         ) {
@@ -183,11 +198,15 @@ API.interceptors.response.use(
       url.includes("/github/callback");
 
     const retryCount = config._retryCount || 0;
-    const maxRetries = 2;
+    const maxRetries = 1; // Bounded single retry to eliminate probe cascading
 
-    if (isSafeGet && !isOAuthFlow && isGenuineColdStart && retryCount < maxRetries) {
+    if (isSafeGet && !isOAuthFlow && !config.skipRetry && isGenuineColdStart && retryCount < maxRetries) {
       config._retryCount = retryCount + 1;
-      const backoffDelay = (retryCount + 1) * 1200; // 1.2s, 2.4s
+      // Reset adapter to avoid recursive adapter wrapping on retry
+      if (config._baseAdapter) {
+        config.adapter = config._baseAdapter;
+      }
+      const backoffDelay = (retryCount + 1) * 1200; // 1.2s
       console.info(`[Backend Connection] Retrying safe GET (${config._retryCount}/${maxRetries}) in ${backoffDelay}ms: ${url}`);
       await new Promise((resolve) => setTimeout(resolve, backoffDelay));
       return API(config);
